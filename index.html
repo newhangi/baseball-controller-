@@ -5,21 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>計分板手機遙控器</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #0b1120; color: #fff; padding: 15px; }
     h2 { font-size: 18px; margin-bottom: 12px; text-align: center; color: #94a3b8; }
-    .section-title { font-size: 13px; color: #64748b; margin: 10px 0 6px 0; font-weight: bold; }
+    .section-title { font-size: 13px; color: #64748b; margin: 12px 0 6px 0; font-weight: bold; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
     .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
     
     button {
       padding: 16px 8px;
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 900;
       border-radius: 8px;
       border: none;
       color: #fff;
       touch-action: manipulation;
+      cursor: pointer;
     }
     button:active { filter: brightness(0.8); transform: scale(0.98); }
 
@@ -29,6 +30,16 @@
     .btn-blue { background: #2563eb; }
     .btn-slate { background: #334155; }
     .btn-orange { background: #ea580c; grid-column: span 2; }
+    .btn-reset {
+      background: #334155;
+      color: #f87171;
+      width: 100%;
+      font-size: 15px;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #ef4444;
+      font-weight: bold;
+    }
   </style>
 
   <!-- 引入 Firebase -->
@@ -60,15 +71,16 @@
     <button class="btn-blue" onclick="nextBatter()">下一棒</button>
     <button class="btn-blue" onclick="prevBatter()">上一棒</button>
     <button class="btn-orange" onclick="nextInningPrompt()">換半局 (輸入得分)</button>
-<!-- 👇【請加在換半局按鈕下方】新增重設按鈕 👇 -->
-    <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #475569;">
-      <button class="btn" style="background: #475569; color: #fff; width: 100%; font-size: 15px; padding: 12px; border-radius: 8px; border: 1px solid #94a3b8;" onclick="resetEntireGame()">
-        ⚠️ 全新比賽 (清空所有紀錄)
-      </button>
+  </div>
+
+  <!-- 全新比賽重設專區（獨立整寬按鈕，避免誤按） -->
+  <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #475569;">
+    <button class="btn-reset" onclick="resetEntireGame()">
+      ⚠️ 全新比賽 (清空所有紀錄)
+    </button>
   </div>
 
 <script>
-  // 【請貼上相同的 Firebase Config】
   const firebaseConfig = {
     apiKey: "你的API_KEY",
     databaseURL: "https://baseball-board-live-default-rtdb.firebaseio.com",
@@ -99,7 +111,7 @@
       if (s.balls >= 4) {
         s.balls = 0; s.strikes = 0;
         if (!s.bases) s.bases = {};
-        s.bases[1] = true; // 四壞自動保送一壘
+        s.bases[1] = true;
       }
       return s;
     });
@@ -110,7 +122,7 @@
       s.strikes = (s.strikes || 0) + 1;
       if (s.strikes >= 3) {
         s.balls = 0; s.strikes = 0;
-        s.outs = (s.outs || 0) + 1; // 三振自動累加出局
+        s.outs = (s.outs || 0) + 1;
       }
       return s;
     });
@@ -166,7 +178,6 @@
         if (!s.scores[side]) s.scores[side] = {};
         s.scores[side][s.currentInning] = score;
 
-        // 切換攻守
         if (!s.isBottom) {
           s.isBottom = true;
         } else {
@@ -180,7 +191,6 @@
     }
   }
 
-// 👇【請貼在 nextInningPrompt 函式下方、</script> 之前】
   function resetEntireGame() {
     const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分與紀錄將被清空！");
     if (!isConfirmed) return;
@@ -200,7 +210,6 @@
       }
     };
 
-    // 直接將全新空白狀態推送至 Firebase 雲端資料庫
     if (db) {
       db.ref('gameState').set(freshState).then(() => {
         alert("✅ 比賽資料已全部清空，回歸第 1 局初！");
