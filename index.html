@@ -60,6 +60,11 @@
     <button class="btn-blue" onclick="nextBatter()">下一棒</button>
     <button class="btn-blue" onclick="prevBatter()">上一棒</button>
     <button class="btn-orange" onclick="nextInningPrompt()">換半局 (輸入得分)</button>
+<!-- 👇【請加在換半局按鈕下方】新增重設按鈕 👇 -->
+    <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #475569;">
+      <button class="btn" style="background: #475569; color: #fff; width: 100%; font-size: 15px; padding: 12px; border-radius: 8px; border: 1px solid #94a3b8;" onclick="resetEntireGame()">
+        ⚠️ 全新比賽 (清空所有紀錄)
+      </button>
   </div>
 
 <script>
@@ -174,6 +179,36 @@
       });
     }
   }
+
+// 👇【請貼在 nextInningPrompt 函式下方、</script> 之前】
+  function resetEntireGame() {
+    const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分與紀錄將被清空！");
+    if (!isConfirmed) return;
+
+    const freshState = {
+      currentInning: 1,
+      isBottom: false,
+      balls: 0,
+      strikes: 0,
+      outs: 0,
+      batterAway: 0,
+      batterHome: 0,
+      bases: { 1: false, 2: false, 3: false },
+      scores: {
+        away: { 1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "" },
+        home: { 1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "" }
+      }
+    };
+
+    // 直接將全新空白狀態推送至 Firebase 雲端資料庫
+    if (db) {
+      db.ref('gameState').set(freshState).then(() => {
+        alert("✅ 比賽資料已全部清空，回歸第 1 局初！");
+      }).catch((err) => {
+        alert("❌ 重設失敗：" + err.message);
+      });
+    }
+  }
 </script>
 </body>
-</html> 
+</html>
