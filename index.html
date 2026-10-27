@@ -50,6 +50,13 @@
 
   <h2>⚾ OBS 棒球直播控制器</h2>
 
+  <!-- 房間切換輸入列 -->
+  <div style="background: #1e293b; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; gap: 8px; align-items: center;">
+    <span style="font-size: 13px; color: #94a3b8; white-space: nowrap;">目前房間:</span>
+    <input id="room-input" type="text" style="background: #0f172a; border: 1px solid #475569; color: #fff; padding: 6px 10px; border-radius: 6px; flex: 1; font-size: 14px;" placeholder="例如: default">
+    <button onclick="changeRoom()" style="padding: 6px 12px; font-size: 14px; background: #2563eb; border-radius: 6px; border: none; font-weight: normal;">切換</button>
+  </div>
+
   <div class="section-title">好壞球與出局</div>
   <div class="grid-2">
     <button class="btn-ball" onclick="addBall()">壞球 (B+1)</button>
@@ -73,7 +80,7 @@
     <button class="btn-orange" onclick="nextInningPrompt()">換半局 (輸入得分)</button>
   </div>
 
-  <!-- 全新比賽重設專區（獨立整寬按鈕，避免誤按） -->
+  <!-- 全新比賽重設專區 -->
   <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #475569;">
     <button class="btn-reset" onclick="resetEntireGame()">
       ⚠️ 全新比賽 (清空所有紀錄)
@@ -81,6 +88,14 @@
   </div>
 
 <script>
+  // 1. 解析網址中的房間名稱 (?room=xxx)，未指定預設為 'default'
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentRoom = urlParams.get('room') || 'default';
+
+  // 2. 將目前房間名稱顯示在輸入框內
+  document.getElementById('room-input').value = currentRoom;
+
+  // 3. Firebase 設定
   const firebaseConfig = {
     apiKey: "你的API_KEY",
     databaseURL: "https://baseball-board-live-default-rtdb.firebaseio.com",
@@ -88,7 +103,9 @@
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
-  const stateRef = db.ref('gameState');
+  
+  // 4. 指向該房間專屬的資料庫節點
+  const stateRef = db.ref('games/' + currentRoom);
 
   function updateState(modifierFn) {
     stateRef.transaction((state) => {
@@ -210,12 +227,20 @@
       }
     };
 
-    if (db) {
-      db.ref('gameState').set(freshState).then(() => {
+    if (stateRef) {
+      stateRef.set(freshState).then(() => {
         alert("✅ 比賽資料已全部清空，回歸第 1 局初！");
       }).catch((err) => {
         alert("❌ 重設失敗：" + err.message);
       });
+    }
+  }
+
+  // 切換房間跳轉
+  function changeRoom() {
+    const newRoom = document.getElementById('room-input').value.trim();
+    if (newRoom) {
+      window.location.href = window.location.pathname + '?room=' + encodeURIComponent(newRoom);
     }
   }
 </script>
