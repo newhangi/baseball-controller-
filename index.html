@@ -33,7 +33,6 @@
     .btn-run-add { background: #ea580c; border: 1px solid #f97316; }
     .btn-run-sub { background: #475569; border: 1px solid #64748b; }
     
-    /* 打席快捷鍵樣式 */
     .btn-hit { background: #047857; border: 1px solid #10b981; }
     .btn-bb { background: #b45309; border: 1px solid #f59e0b; }
     .btn-error { background: #7c2d12; border: 1px solid #ea580c; }
@@ -50,7 +49,6 @@
       font-weight: bold;
     }
 
-    /* 折疊抽屜樣式 */
     .btn-accordion {
       background: #1e293b;
       color: #38bdf8;
@@ -125,7 +123,6 @@
     }
   </style>
 
-  <!-- 引入 Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
@@ -133,7 +130,6 @@
 
   <h2>⚾ OBS 棒球直播控制器</h2>
 
-  <!-- 房間切換輸入列 -->
   <div style="background: #1e293b; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; gap: 8px; align-items: center;">
     <span style="font-size: 13px; color: #94a3b8; white-space: nowrap;">目前房間:</span>
     <input id="room-input" type="text" style="background: #0f172a; border: 1px solid #475569; color: #fff; padding: 6px 10px; border-radius: 6px; flex: 1; font-size: 14px;" placeholder="例如: default">
@@ -156,7 +152,7 @@
   </div>
   <button class="btn-slate" style="width: 100%; margin-bottom: 10px;" onclick="clearBases()">清空所有壘包</button>
 
-  <div class="section-title">打席結算（自動連動 H / E / 成績）</div>
+  <div class="section-title">打席結算（自動連動 H / E / 成績與歷程）</div>
   <div class="grid-4">
     <button class="btn-hit" onclick="recordHit()">🟢 安打 (H)</button>
     <button class="btn-out-atbat" onclick="recordAtBatOut()">🔴 出局 (Out)</button>
@@ -175,14 +171,12 @@
     🔄 換半局 (切換攻守 / 局數+1)
   </button>
 
-  <!-- 全新比賽重設專區 -->
   <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #475569;">
     <button class="btn-reset" onclick="resetEntireGame()">
       ⚠️ 全新比賽 (清空所有紀錄)
     </button>
   </div>
 
-  <!-- ⚙️ 折疊式先發名單抽屜 -->
   <button class="btn-accordion" onclick="toggleLineupDrawer()">
     <span>⚙️ 先發打線名單設定</span>
     <span id="accordion-arrow">▼ 點擊展開</span>
@@ -204,7 +198,7 @@
   document.getElementById('room-input').value = currentRoom;
 
   const firebaseConfig = {
-    apiKey: "AIzaSyBJqOQodUEdLtqiQYPVgsXLnTN1dU-XpUM",
+    apiKey: "你的API_KEY",
     databaseURL: "https://baseball-board-live-default-rtdb.firebaseio.com",
     projectId: "baseball-board-live"
   };
@@ -214,16 +208,18 @@
   const stateRef = db.ref('games/' + currentRoom + '/gameState');
   const lineupRef = db.ref('games/' + currentRoom + '/lineups');
 
-  const defaultAway = [
-    { name: "James", pos: "2B" }, { name: "Bryan", pos: "CF" }, { name: "Justin", pos: "SS" },
-    { name: "第四棒", pos: "3B" }, { name: "第五棒", pos: "1B" }, { name: "第六棒", pos: "LF" },
-    { name: "第七棒", pos: "DH" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "RF" }
-  ];
-  const defaultHome = [
-    { name: "第一棒", pos: "3B" }, { name: "第二棒", pos: "2B" }, { name: "第三棒", pos: "RF" },
-    { name: "第四棒", pos: "DH" }, { name: "第五棒", pos: "CF" }, { name: "第六棒", pos: "LF" },
-    { name: "第七棒", pos: "SS" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "1B" }
-  ];
+  let currentLineups = {
+    away: [
+      { name: "James", pos: "2B" }, { name: "Bryan", pos: "CF" }, { name: "Justin", pos: "SS" },
+      { name: "第四棒", pos: "3B" }, { name: "第五棒", pos: "1B" }, { name: "第六棒", pos: "LF" },
+      { name: "第七棒", pos: "DH" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "RF" }
+    ],
+    home: [
+      { name: "第一棒", pos: "3B" }, { name: "第二棒", pos: "2B" }, { name: "第三棒", pos: "RF" },
+      { name: "第四棒", pos: "DH" }, { name: "第五棒", pos: "CF" }, { name: "第六棒", pos: "LF" },
+      { name: "第七棒", pos: "SS" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "1B" }
+    ]
+  };
 
   function renderInputRows(containerId, list, prefix) {
     const container = document.getElementById(containerId);
@@ -238,14 +234,14 @@
       `;
     });
   }
-  renderInputRows("away-inputs", defaultAway, "away");
-  renderInputRows("home-inputs", defaultHome, "home");
+  renderInputRows("away-inputs", currentLineups.away, "away");
+  renderInputRows("home-inputs", currentLineups.home, "home");
 
   lineupRef.on('value', (snap) => {
     const data = snap.val();
     if (data) {
-      if (data.away) renderInputRows("away-inputs", data.away, "away");
-      if (data.home) renderInputRows("home-inputs", data.home, "home");
+      if (data.away) { currentLineups.away = data.away; renderInputRows("away-inputs", data.away, "away"); }
+      if (data.home) { currentLineups.home = data.home; renderInputRows("home-inputs", data.home, "home"); }
     }
   });
 
@@ -289,7 +285,7 @@
           bases: { 1: false, 2: false, 3: false },
           scores: { away: {}, home: {} },
           stats: { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } },
-          playerStats: { away: {}, home: {} }
+          playerHistory: {}
         };
       }
       return modifierFn(state);
@@ -303,13 +299,100 @@
     if (!s.stats) s.stats = { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } };
     if (!s.stats.away) s.stats.away = { h: 0, e: 0 };
     if (!s.stats.home) s.stats.home = { h: 0, e: 0 };
-    if (!s.playerStats) s.playerStats = { away: {}, home: {} };
-    if (!s.playerStats.away) s.playerStats.away = {};
-    if (!s.playerStats.home) s.playerStats.home = {};
+    if (!s.playerHistory) s.playerHistory = {};
     if (!s.bases) s.bases = { 1: false, 2: false, 3: false };
   }
 
-  // === 即時得分累加 / 倒扣 ===
+  // 取得當前打者姓名
+  function getCurrentBatterName(isBottom, curIdx) {
+    const list = isBottom ? currentLineups.home : currentLineups.away;
+    return (list[curIdx] && list[curIdx].name) ? list[curIdx].name : (isBottom ? `主隊${curIdx+1}棒` : `客隊${curIdx+1}棒`);
+  }
+
+  function recordHit() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+      const playerName = getCurrentBatterName(s.isBottom, curIdx);
+
+      s.stats[offTeam].h = (s.stats[offTeam].h || 0) + 1;
+
+      if (!s.playerHistory[playerName]) s.playerHistory[playerName] = { h: 0, ab: 0, events: [] };
+      s.playerHistory[playerName].h += 1;
+      s.playerHistory[playerName].ab += 1;
+      if (!s.playerHistory[playerName].events) s.playerHistory[playerName].events = [];
+      s.playerHistory[playerName].events.push("一安");
+
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  function recordAtBatOut() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+      const playerName = getCurrentBatterName(s.isBottom, curIdx);
+
+      if (!s.playerHistory[playerName]) s.playerHistory[playerName] = { h: 0, ab: 0, events: [] };
+      s.playerHistory[playerName].ab += 1;
+      if (!s.playerHistory[playerName].events) s.playerHistory[playerName].events = [];
+      s.playerHistory[playerName].events.push("出局");
+
+      s.outs = ((s.outs || 0) + 1) % 4;
+      s.balls = 0; s.strikes = 0;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  function recordBB() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+      const playerName = getCurrentBatterName(s.isBottom, curIdx);
+
+      if (!s.playerHistory[playerName]) s.playerHistory[playerName] = { h: 0, ab: 0, events: [] };
+      if (!s.playerHistory[playerName].events) s.playerHistory[playerName].events = [];
+      s.playerHistory[playerName].events.push("四壞");
+
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  function recordError() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const defTeam = s.isBottom ? 'away' : 'home';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+      const playerName = getCurrentBatterName(s.isBottom, curIdx);
+
+      s.stats[defTeam].e = (s.stats[defTeam].e || 0) + 1;
+
+      if (!s.playerHistory[playerName]) s.playerHistory[playerName] = { h: 0, ab: 0, events: [] };
+      s.playerHistory[playerName].ab += 1;
+      if (!s.playerHistory[playerName].events) s.playerHistory[playerName].events = [];
+      s.playerHistory[playerName].events.push("失誤");
+
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
   function addRun(delta) {
     updateState(s => {
       ensureStatsStructure(s);
@@ -321,12 +404,10 @@
     });
   }
 
-  // === 純切換半局 ===
   function switchHalfInning() {
     updateState(s => {
       ensureStatsStructure(s);
       const side = s.isBottom ? 'home' : 'away';
-      // 若該半局沒得分，確保該局數記錄為 0
       if (s.scores[side][s.currentInning] === undefined || s.scores[side][s.currentInning] === "") {
         s.scores[side][s.currentInning] = 0;
       }
@@ -343,78 +424,6 @@
     });
   }
 
-  // === 打席結算快捷鍵 ===
-  function recordHit() {
-    updateState(s => {
-      ensureStatsStructure(s);
-      const offTeam = s.isBottom ? 'home' : 'away';
-      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
-
-      s.stats[offTeam].h = (s.stats[offTeam].h || 0) + 1;
-
-      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
-      s.playerStats[offTeam][curIdx].h += 1;
-      s.playerStats[offTeam][curIdx].ab += 1;
-
-      s.balls = 0; s.strikes = 0;
-      s.bases[1] = true;
-      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
-      else s.batterHome = (curIdx + 1) % 9;
-      return s;
-    });
-  }
-
-  function recordAtBatOut() {
-    updateState(s => {
-      ensureStatsStructure(s);
-      const offTeam = s.isBottom ? 'home' : 'away';
-      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
-
-      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
-      s.playerStats[offTeam][curIdx].ab += 1;
-
-      s.outs = ((s.outs || 0) + 1) % 4;
-      s.balls = 0; s.strikes = 0;
-      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
-      else s.batterHome = (curIdx + 1) % 9;
-      return s;
-    });
-  }
-
-  function recordBB() {
-    updateState(s => {
-      ensureStatsStructure(s);
-      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
-
-      s.balls = 0; s.strikes = 0;
-      s.bases[1] = true;
-      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
-      else s.batterHome = (curIdx + 1) % 9;
-      return s;
-    });
-  }
-
-  function recordError() {
-    updateState(s => {
-      ensureStatsStructure(s);
-      const offTeam = s.isBottom ? 'home' : 'away';
-      const defTeam = s.isBottom ? 'away' : 'home';
-      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
-
-      s.stats[defTeam].e = (s.stats[defTeam].e || 0) + 1;
-
-      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
-      s.playerStats[offTeam][curIdx].ab += 1;
-
-      s.balls = 0; s.strikes = 0;
-      s.bases[1] = true;
-      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
-      else s.batterHome = (curIdx + 1) % 9;
-      return s;
-    });
-  }
-
-  // === 基本控制 ===
   function addBall() {
     updateState(s => {
       s.balls = (s.balls || 0) + 1;
@@ -479,7 +488,7 @@
   }
 
   function resetEntireGame() {
-    const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分、安打、失誤與紀錄將被清空！");
+    const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分、安打、失誤與球員歷程將被清空！");
     if (!isConfirmed) return;
 
     const freshState = {
@@ -499,10 +508,7 @@
         away: { h: 0, e: 0 },
         home: { h: 0, e: 0 }
       },
-      playerStats: {
-        away: { 0: {h:0, ab:0}, 1: {h:0, ab:0}, 2: {h:0, ab:0}, 3: {h:0, ab:0}, 4: {h:0, ab:0}, 5: {h:0, ab:0}, 6: {h:0, ab:0}, 7: {h:0, ab:0}, 8: {h:0, ab:0} },
-        home: { 0: {h:0, ab:0}, 1: {h:0, ab:0}, 2: {h:0, ab:0}, 3: {h:0, ab:0}, 4: {h:0, ab:0}, 5: {h:0, ab:0}, 6: {h:0, ab:0}, 7: {h:0, ab:0}, 8: {h:0, ab:0} }
-      }
+      playerHistory: {}
     };
 
     if (stateRef) {
