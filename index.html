@@ -2,590 +2,419 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>OBS 棒球直播全功能轉播面板</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>計分板手機遙控器</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
-    }
-
-    body {
-      width: 1920px;
-      height: 1080px;
-      overflow: hidden;
-      background-color: transparent;
-      color: #fff;
-      position: relative;
-    }
-
-    /* 1. 左上角：CPBL 總表 + 球員照 */
-    .top-left-widget {
-      position: absolute;
-      top: 30px;
-      left: 30px;
-      display: flex;
-      align-items: stretch;
-      gap: 16px;
-      filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.75));
-    }
-
-    .cpbl-scorebug {
-      width: 350px;
-      background: #172033;
-      border: 2px solid #2e3e5c;
-      border-radius: 10px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .top-meta-bar {
-      background: #1e293b;
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 800;
-      color: #94a3b8;
-      display: flex;
-      justify-content: space-between;
-      border-bottom: 1px solid #2e3e5c;
-    }
-
-    .pitcher-bar {
-      background: #111827;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 4px 10px;
-      font-size: 12px;
-      font-weight: 800;
-      border-bottom: 1px solid #1f2937;
-    }
-    .pitcher-tag {
-      background: #eab308;
-      color: #000;
-      font-size: 10px;
-      padding: 1px 4px;
-      border-radius: 2px;
-      margin-right: 6px;
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0b1120; color: #fff; padding: 15px; }
+    h2 { font-size: 18px; margin-bottom: 12px; text-align: center; color: #94a3b8; }
+    .section-title { font-size: 13px; color: #64748b; margin: 12px 0 6px 0; font-weight: bold; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    
+    button {
+      padding: 16px 8px;
+      font-size: 16px;
       font-weight: 900;
-    }
-
-    .score-main-bar {
-      display: flex;
-      height: 48px;
-      align-items: center;
-      background: #000;
-    }
-    .team-block {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 100%;
-      padding: 0 10px;
-      font-size: 17px;
-      font-weight: 900;
-    }
-    .team-away-block {
-      background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
-      color: #fff;
-      border-right: 1px solid #111;
-    }
-    .team-home-block {
-      background: linear-gradient(180deg, #facc15 0%, #ca8a04 100%);
-      color: #000;
-    }
-    .team-score {
-      font-size: 24px;
-      min-width: 22px;
-      text-align: center;
-    }
-
-    .bases-container {
-      width: 70px;
-      height: 100%;
-      background: #1e293b;
-      position: relative;
-    }
-    .base-diamond {
-      position: absolute;
-      width: 12px;
-      height: 12px;
-      background: #475569;
-      transform: rotate(45deg);
-      border: 1px solid #0f172a;
-      transition: background 0.15s ease;
-    }
-    .base-diamond.active {
-      background: #facc15;
-      box-shadow: 0 0 6px rgba(250, 204, 21, 0.8);
-    }
-    .base-2nd { top: 6px; left: 29px; }
-    .base-3rd { top: 18px; left: 16px; }
-    .base-1st { top: 18px; left: 42px; }
-
-    .count-bar {
-      background: #111c2e;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 5px 12px;
-      font-size: 13px;
-      font-weight: 800;
-      border-bottom: 1px solid #1e293b;
-    }
-    .inning-box { color: #38bdf8; display: flex; align-items: center; gap: 4px; }
-    .bso-group { display: flex; align-items: center; gap: 8px; }
-    .bso-item { display: flex; align-items: center; gap: 3px; font-size: 11px; color: #94a3b8; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #334155; }
-    .dot.ball { background: #22c55e; box-shadow: 0 0 5px #22c55e; }
-    .dot.strike { background: #eab308; box-shadow: 0 0 5px #eab308; }
-    .dot.out { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
-
-    .batter-bar {
-      background: #0b1120;
-      padding: 6px 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-      font-weight: 800;
-      border-left: 4px solid #ef4444;
-      transition: border-color 0.2s;
-    }
-
-    /* 右側球員半身照卡片（白外框） */
-    .player-photo-card {
-      width: 140px;
-      height: 165px;
-      background: #172033;
-      border: 3px solid #ffffff;
       border-radius: 8px;
-      overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.6);
-      position: relative;
-    }
-    .player-photo-card img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: top center;
-      transition: opacity 0.15s ease;
-    }
-    .player-photo-placeholder {
-      display: none;
-      font-size: 13px;
-      color: #94a3b8;
-      font-weight: bold;
-      text-align: center;
-    }
-
-    /* 2. 右上角：1~9 局詳細計分板 */
-    .top-right-table {
-      position: absolute;
-      top: 30px;
-      right: 40px;
-      border-collapse: collapse;
-      background: rgba(15, 23, 42, 0.95);
-      border: 2px solid #334155;
-      border-radius: 8px;
-      overflow: hidden;
-      font-weight: bold;
-      text-align: center;
-      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.7);
-    }
-    .top-right-table th, .top-right-table td {
-      width: 34px;
-      height: 32px;
-      border: 1px solid #334155;
-      font-size: 14px;
-    }
-    .top-right-table th { background: #1e293b; color: #94a3b8; }
-    .top-right-table .team-cell { width: 70px; color: #fff; font-size: 15px; }
-    .team-away-bg { background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%); color: #fff; }
-    .team-home-bg { background: linear-gradient(180deg, #facc15 0%, #ca8a04 100%); color: #000; }
-    .stat-header { background: #c2410c !important; color: #fff !important; }
-
-    /* 3. 右下角：雙隊打線名單 */
-    .bottom-right-lineup {
-      position: absolute;
-      bottom: 40px;
-      right: 40px;
-      display: flex;
-      gap: 16px;
-      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.7);
-    }
-    .lineup-box {
-      width: 175px;
-      background: rgba(15, 23, 42, 0.95);
-      border: 2px solid #334155;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .lineup-header { padding: 6px; text-align: center; font-weight: 900; font-size: 14px; }
-    .lineup-list { list-style: none; }
-    .lineup-item {
-      display: flex;
-      align-items: center;
-      padding: 5px 8px;
-      font-size: 13px;
-      border-bottom: 1px solid #1e293b;
-    }
-    .lineup-item .order { width: 18px; font-weight: bold; color: #64748b; }
-    .lineup-item .player-name { flex: 1; font-weight: 700; text-align: center; }
-    .lineup-item .position { width: 25px; color: #94a3b8; font-size: 11px; text-align: right; }
-    .lineup-item.active { background-color: #f59e0b; color: #000; font-weight: bold; }
-    .lineup-item.active .order, .lineup-item.active .position { color: #000; }
-
-    /* 4. 左下角：橫向控制操作列 */
-    .bottom-left-controller {
-      position: absolute;
-      bottom: 235px;
-      left: 30px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      background: rgba(15, 23, 42, 0.85);
-      padding: 10px 14px;
-      border-radius: 10px;
-      border: 1px solid #334155;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.6);
-    }
-    .ctrl-btn {
-      padding: 10px 14px;
-      font-size: 14px;
-      font-weight: 900;
-      border-radius: 6px;
       border: none;
       color: #fff;
-      cursor: pointer;
       touch-action: manipulation;
-      transition: filter 0.1s, transform 0.1s;
-      white-space: nowrap;
+      cursor: pointer;
     }
-    .ctrl-btn:active { filter: brightness(0.8); transform: scale(0.96); }
+    button:active { filter: brightness(0.8); transform: scale(0.98); }
 
     .btn-ball { background: #166534; border: 1px solid #22c55e; }
     .btn-strike { background: #854d0e; border: 1px solid #eab308; }
     .btn-out { background: #991b1b; border: 1px solid #ef4444; }
-    .btn-slate { background: #334155; }
     .btn-blue { background: #2563eb; }
-    .btn-orange { background: #ea580c; }
+    .btn-slate { background: #334155; }
+    .btn-run-add { background: #ea580c; border: 1px solid #f97316; }
+    .btn-run-sub { background: #475569; border: 1px solid #64748b; }
+    
+    /* 打席快捷鍵樣式 */
+    .btn-hit { background: #047857; border: 1px solid #10b981; }
+    .btn-bb { background: #b45309; border: 1px solid #f59e0b; }
+    .btn-error { background: #7c2d12; border: 1px solid #ea580c; }
+    .btn-out-atbat { background: #b91c1c; border: 1px solid #f87171; }
+
+    .btn-reset {
+      background: #334155;
+      color: #f87171;
+      width: 100%;
+      font-size: 15px;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #ef4444;
+      font-weight: bold;
+    }
+
+    /* 折疊抽屜樣式 */
+    .btn-accordion {
+      background: #1e293b;
+      color: #38bdf8;
+      width: 100%;
+      font-size: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      font-weight: bold;
+      margin-top: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .lineup-drawer {
+      display: none;
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .lineup-table-title {
+      font-size: 14px;
+      font-weight: 900;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #374151;
+    }
+    .player-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+      align-items: center;
+    }
+    .player-row span {
+      width: 22px;
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: bold;
+      text-align: center;
+    }
+    .input-name {
+      flex: 1;
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: #fff;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .input-pos {
+      width: 55px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: #fff;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      text-align: center;
+    }
+    .btn-save-lineup {
+      width: 100%;
+      background: #059669;
+      color: #fff;
+      font-size: 15px;
+      padding: 12px;
+      border-radius: 6px;
+      border: none;
+      font-weight: bold;
+      margin-top: 12px;
+    }
   </style>
 
+  <!-- 引入 Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
-  <!-- 1. 左上角總表與球員照片 -->
-  <div class="top-left-widget">
-    <div class="cpbl-scorebug">
-      <div class="top-meta-bar">
-        <span>2026 到齊全系列 GAME 4</span>
-        <span id="game-status-sub">對外賽</span>
-      </div>
-      <div class="pitcher-bar">
-        <div><span class="pitcher-tag">P</span><span id="pitcher-name">投手</span></div>
-        <div><span style="color:#94a3b8; font-size: 11px;">NP:</span> <span id="pitcher-count">0</span></div>
-      </div>
-      <div class="score-main-bar">
-        <div class="team-block team-away-block">
-          <span id="name-away">到齊</span>
-          <span class="team-score" id="score-away">0</span>
-        </div>
-        <div class="team-block team-home-block">
-          <span id="name-home">友隊</span>
-          <span class="team-score" id="score-home">0</span>
-        </div>
-        <div class="bases-container">
-          <div class="base-diamond base-2nd" id="base2"></div>
-          <div class="base-diamond base-3rd" id="base3"></div>
-          <div class="base-diamond base-1st" id="base1"></div>
-        </div>
-      </div>
-      <div class="count-bar">
-        <div class="inning-box"><span id="disp-inning">1</span><span id="disp-arrow">▲</span></div>
-        <div class="bso-group">
-          <div class="bso-item">B <div class="dot" id="b1"></div><div class="dot" id="b2"></div><div class="dot" id="b3"></div></div>
-          <div class="bso-item">S <div class="dot" id="s1"></div><div class="dot" id="s2"></div></div>
-          <div class="bso-item">O <div class="dot" id="o1"></div><div class="dot" id="o2"></div></div>
-        </div>
-      </div>
-      <div class="batter-bar" id="batter-container">
-        <div>
-          <span id="disp-batter-order" style="color: #94a3b8; margin-right: 6px;">1</span>
-          <span id="disp-batter-name">James</span>
-        </div>
-        <div id="disp-batter-stat" style="color: #cbd5e1; font-size: 12px;">0-0</div>
-      </div>
-    </div>
+  <h2>⚾ OBS 棒球直播控制器</h2>
 
-    <!-- 球員定裝半身照 -->
-    <div class="player-photo-card" id="photo-card">
-      <img id="player-img" src="" alt="球員照" onerror="handleImgError()" onload="handleImgLoad()" />
-      <div class="player-photo-placeholder" id="photo-placeholder">球員照片<br>建置中</div>
-    </div>
+  <!-- 房間切換輸入列 -->
+  <div style="background: #1e293b; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; gap: 8px; align-items: center;">
+    <span style="font-size: 13px; color: #94a3b8; white-space: nowrap;">目前房間:</span>
+    <input id="room-input" type="text" style="background: #0f172a; border: 1px solid #475569; color: #fff; padding: 6px 10px; border-radius: 6px; flex: 1; font-size: 14px;" placeholder="例如: default">
+    <button onclick="changeRoom()" style="padding: 6px 12px; font-size: 14px; background: #2563eb; border-radius: 6px; border: none; font-weight: normal;">切換</button>
   </div>
 
-  <!-- 2. 右上角詳細計分板 -->
-  <table class="top-right-table">
-    <thead>
-      <tr>
-        <th>TEAM</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th>
-        <th class="stat-header">R</th><th class="stat-header">H</th><th class="stat-header">E</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="team-cell team-away-bg">到齊</td>
-        <td id="away-1"></td><td id="away-2"></td><td id="away-3"></td><td id="away-4"></td><td id="away-5"></td><td id="away-6"></td><td id="away-7"></td><td id="away-8"></td><td id="away-9"></td>
-        <td id="away-r">0</td><td id="away-h">0</td><td id="away-e">0</td>
-      </tr>
-      <tr>
-        <td class="team-cell team-home-bg">友隊</td>
-        <td id="home-1"></td><td id="home-2"></td><td id="home-3"></td><td id="home-4"></td><td id="home-5"></td><td id="home-6"></td><td id="home-7"></td><td id="home-8"></td><td id="home-9"></td>
-        <td id="home-r">0</td><td id="home-h">0</td><td id="home-e">0</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <!-- 3. 右下角打線名單 -->
-  <div class="bottom-right-lineup">
-    <div class="lineup-box">
-      <div class="lineup-header team-away-bg">到齊 打線</div>
-      <ul class="lineup-list" id="lineup-away"></ul>
-    </div>
-    <div class="lineup-box">
-      <div class="lineup-header team-home-bg">友隊 打線</div>
-      <ul class="lineup-list" id="lineup-home"></ul>
-    </div>
+  <div class="section-title">好壞球與出局</div>
+  <div class="grid-2">
+    <button class="btn-ball" onclick="addBall()">壞球 (B+1)</button>
+    <button class="btn-strike" onclick="addStrike()">好球 (S+1)</button>
+    <button class="btn-out" onclick="addOut()">出局 (O+1)</button>
+    <button class="btn-slate" onclick="clearBS()">清空好壞球</button>
   </div>
 
-  <!-- 4. 左下角橫向控制條 -->
-  <div class="bottom-left-controller">
-    <button class="ctrl-btn btn-ball" onclick="addBall()">壞球 (B+1)</button>
-    <button class="ctrl-btn btn-strike" onclick="addStrike()">好球 (S+1)</button>
-    <button class="ctrl-btn btn-out" onclick="addOut()">出局 (O+1)</button>
-    <button class="ctrl-btn btn-slate" onclick="clearBS()">清空球數</button>
-    <button class="ctrl-btn btn-slate" onclick="toggleBase(1)">一壘</button>
-    <button class="ctrl-btn btn-slate" onclick="toggleBase(2)">二壘</button>
-    <button class="ctrl-btn btn-slate" onclick="toggleBase(3)">三壘</button>
-    <button class="ctrl-btn btn-slate" onclick="clearBases()">清空壘包</button>
-    <button class="ctrl-btn btn-blue" onclick="nextBatter()">下一棒</button>
-    <button class="ctrl-btn btn-orange" onclick="switchHalfInning()">換半局</button>
-    <button class="ctrl-btn" style="background: #475569; border: 1px solid #94a3b8;" onclick="resetEntireGame()">全新比賽 (全部重設)</button>
+  <div class="section-title">壘包控制</div>
+  <div class="grid-3">
+    <button class="btn-slate" id="m-base1" onclick="toggleBase(1)">一壘</button>
+    <button class="btn-slate" id="m-base2" onclick="toggleBase(2)">二壘</button>
+    <button class="btn-slate" id="m-base3" onclick="toggleBase(3)">三壘</button>
+  </div>
+  <button class="btn-slate" style="width: 100%; margin-bottom: 10px;" onclick="clearBases()">清空所有壘包</button>
+
+  <div class="section-title">打席結算（自動連動 H / E / 成績）</div>
+  <div class="grid-4">
+    <button class="btn-hit" onclick="recordHit()">🟢 安打 (H)</button>
+    <button class="btn-out-atbat" onclick="recordAtBatOut()">🔴 出局 (Out)</button>
+    <button class="btn-bb" onclick="recordBB()">🟡 保送 (BB)</button>
+    <button class="btn-error" onclick="recordError()">⚠️ 對方失誤 (E)</button>
+  </div>
+
+  <div class="section-title">即時得分與比賽推進</div>
+  <div class="grid-2">
+    <button class="btn-run-add" onclick="addRun(1)">💥 得分 (+1)</button>
+    <button class="btn-run-sub" onclick="addRun(-1)">↩️ 得分 (-1)</button>
+    <button class="btn-blue" onclick="prevBatter()">上一棒</button>
+    <button class="btn-blue" onclick="nextBatter()">下一棒</button>
+  </div>
+  <button class="btn-slate" style="width: 100%; margin-bottom: 10px; background: #1e3a8a; border: 1px solid #3b82f6;" onclick="switchHalfInning()">
+    🔄 換半局 (切換攻守 / 局數+1)
+  </button>
+
+  <!-- 全新比賽重設專區 -->
+  <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #475569;">
+    <button class="btn-reset" onclick="resetEntireGame()">
+      ⚠️ 全新比賽 (清空所有紀錄)
+    </button>
+  </div>
+
+  <!-- ⚙️ 折疊式先發名單抽屜 -->
+  <button class="btn-accordion" onclick="toggleLineupDrawer()">
+    <span>⚙️ 先發打線名單設定</span>
+    <span id="accordion-arrow">▼ 點擊展開</span>
+  </button>
+
+  <div class="lineup-drawer" id="lineup-drawer">
+    <div class="lineup-table-title" style="color: #ef4444;">🔴 客隊打線（先攻）</div>
+    <div id="away-inputs"></div>
+
+    <div class="lineup-table-title" style="color: #facc15; margin-top: 15px;">🟡 主隊打線（後攻）</div>
+    <div id="home-inputs"></div>
+
+    <button class="btn-save-lineup" onclick="saveLineups()">💾 儲存並同步至 OBS</button>
   </div>
 
 <script>
-  let awayPlayers = [
-    { name: "James", pos: "2B", img: "players/James.png" },
-    { name: "Bryan", pos: "CF", img: "players/Bryan.jpg" },
-    { name: "Justin", pos: "SS", img: "players/away3.png" },
-    { name: "第四棒", pos: "3B", img: "players/away4.png" },
-    { name: "第五棒", pos: "1B", img: "players/away5.png" },
-    { name: "第六棒", pos: "LF", img: "players/away6.png" },
-    { name: "第七棒", pos: "DH", img: "players/away7.png" },
-    { name: "第八棒", pos: "C",  img: "players/away8.png" },
-    { name: "第九棒", pos: "RF", img: "players/away9.png" }
-  ];
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentRoom = urlParams.get('room') || 'default';
+  document.getElementById('room-input').value = currentRoom;
 
-  let homePlayers = [
-    { name: "第一棒", pos: "3B", img: "players/home1.png" },
-    { name: "第二棒", pos: "2B", img: "players/home2.png" },
-    { name: "第三棒", pos: "RF", img: "players/home3.png" },
-    { name: "第四棒", pos: "DH", img: "players/home4.png" },
-    { name: "第五棒", pos: "CF", img: "players/home5.png" },
-    { name: "第六棒", pos: "LF", img: "players/home6.png" },
-    { name: "第七棒", pos: "SS", img: "players/home7.png" },
-    { name: "第八棒", pos: "C",  img: "players/home8.png" },
-    { name: "第九棒", pos: "1B", img: "players/home9.png" }
-  ];
-
-  let localState = {
-    currentInning: 1,
-    isBottom: false,
-    balls: 0,
-    strikes: 0,
-    outs: 0,
-    batterAway: 0,
-    batterHome: 0,
-    bases: { 1: false, 2: false, 3: false },
-    scores: { away: {}, home: {} },
-    stats: { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } },
-    playerStats: { away: {}, home: {} }
+  const firebaseConfig = {
+    apiKey: "AIzaSyBJqOQodUEdLtqiQYPVgsXLnTN1dU-XpUM",
+    databaseURL: "https://baseball-board-live-default-rtdb.firebaseio.com",
+    projectId: "baseball-board-live"
   };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  
+  const stateRef = db.ref('games/' + currentRoom + '/gameState');
+  const lineupRef = db.ref('games/' + currentRoom + '/lineups');
 
-  function initLineup(elemId, list) {
-    const ul = document.getElementById(elemId);
-    ul.innerHTML = "";
+  const defaultAway = [
+    { name: "James", pos: "2B" }, { name: "Bryan", pos: "CF" }, { name: "Justin", pos: "SS" },
+    { name: "第四棒", pos: "3B" }, { name: "第五棒", pos: "1B" }, { name: "第六棒", pos: "LF" },
+    { name: "第七棒", pos: "DH" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "RF" }
+  ];
+  const defaultHome = [
+    { name: "第一棒", pos: "3B" }, { name: "第二棒", pos: "2B" }, { name: "第三棒", pos: "RF" },
+    { name: "第四棒", pos: "DH" }, { name: "第五棒", pos: "CF" }, { name: "第六棒", pos: "LF" },
+    { name: "第七棒", pos: "SS" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "1B" }
+  ];
+
+  function renderInputRows(containerId, list, prefix) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
     list.forEach((p, i) => {
-      ul.innerHTML += `<li class="lineup-item" id="${elemId}-${i}">
-        <span class="order">${i+1}</span>
-        <span class="player-name">${p.name}</span>
-        <span class="position">${p.pos}</span>
-      </li>`;
+      container.innerHTML += `
+        <div class="player-row">
+          <span>${i + 1}</span>
+          <input type="text" class="input-name" id="${prefix}-name-${i}" value="${p.name || ''}" placeholder="姓名">
+          <input type="text" class="input-pos" id="${prefix}-pos-${i}" value="${p.pos || ''}" placeholder="守位">
+        </div>
+      `;
     });
   }
-  initLineup("lineup-away", awayPlayers);
-  initLineup("lineup-home", homePlayers);
+  renderInputRows("away-inputs", defaultAway, "away");
+  renderInputRows("home-inputs", defaultHome, "home");
 
-  function handleImgError() {
-    const imgElem = document.getElementById("player-img");
-    if (imgElem.src.endsWith(".png")) {
-      imgElem.src = imgElem.src.replace(".png", ".jpg");
-    } else {
-      imgElem.style.display = "none";
-      document.getElementById("photo-placeholder").style.display = "block";
+  lineupRef.on('value', (snap) => {
+    const data = snap.val();
+    if (data) {
+      if (data.away) renderInputRows("away-inputs", data.away, "away");
+      if (data.home) renderInputRows("home-inputs", data.home, "home");
     }
+  });
+
+  function toggleLineupDrawer() {
+    const drawer = document.getElementById('lineup-drawer');
+    const arrow = document.getElementById('accordion-arrow');
+    const isHidden = drawer.style.display === 'none' || drawer.style.display === '';
+    drawer.style.display = isHidden ? 'block' : 'none';
+    arrow.innerText = isHidden ? '▲ 點擊收合' : '▼ 點擊展開';
   }
-  function handleImgLoad() {
-    document.getElementById("player-img").style.display = "block";
-    document.getElementById("photo-placeholder").style.display = "none";
-  }
 
-  function renderUI(data) {
-    if (!data) return;
-
-    // 1. 局數與箭頭
-    document.getElementById("disp-inning").innerText = data.currentInning || 1;
-    document.getElementById("disp-arrow").innerText = data.isBottom ? "▼" : "▲";
-
-    // 2. BSO 燈號
-    const b = data.balls || 0, s = data.strikes || 0, o = data.outs || 0;
-    document.getElementById("b1").classList.toggle("ball", b >= 1);
-    document.getElementById("b2").classList.toggle("ball", b >= 2);
-    document.getElementById("b3").classList.toggle("ball", b >= 3);
-    document.getElementById("s1").classList.toggle("strike", s >= 1);
-    document.getElementById("s2").classList.toggle("strike", s >= 2);
-    document.getElementById("o1").classList.toggle("out", o >= 1);
-    document.getElementById("o2").classList.toggle("out", o >= 2);
-
-    // 3. 壘包
-    document.getElementById("base1").classList.toggle("active", !!(data.bases && data.bases[1]));
-    document.getElementById("base2").classList.toggle("active", !!(data.bases && data.bases[2]));
-    document.getElementById("base3").classList.toggle("active", !!(data.bases && data.bases[3]));
-
-    // 4. 打者資訊、即時成績與照片
-    const isAway = !data.isBottom;
-    const curIdx = isAway ? (data.batterAway || 0) : (data.batterHome || 0);
-    const curTeamKey = isAway ? 'away' : 'home';
-    const curTeamList = isAway ? awayPlayers : homePlayers;
-    const player = curTeamList[curIdx] || { name: "打者", img: "" };
-
-    document.querySelectorAll('.lineup-item').forEach(el => el.classList.remove('active'));
-    const targetItem = document.getElementById(`${isAway ? 'lineup-away' : 'lineup-home'}-${curIdx}`);
-    if (targetItem) targetItem.classList.add('active');
-
-    document.getElementById("disp-batter-order").innerText = curIdx + 1;
-    document.getElementById("disp-batter-name").innerText = player.name;
-    document.getElementById("batter-container").style.borderLeftColor = isAway ? "#ef4444" : "#eab308";
-
-    // 動態更新打者個人成績 (安打數 - 打數)
-    const pStats = (data.playerStats && data.playerStats[curTeamKey] && data.playerStats[curTeamKey][curIdx]) || { h: 0, ab: 0 };
-    document.getElementById("disp-batter-stat").innerText = `${pStats.h || 0}-${pStats.ab || 0}`;
-
-    const imgElem = document.getElementById("player-img");
-    if (player.img) {
-      imgElem.src = player.img;
-    } else {
-      imgElem.style.display = "none";
-      document.getElementById("photo-placeholder").style.display = "block";
+  function saveLineups() {
+    const away = [];
+    const home = [];
+    for (let i = 0; i < 9; i++) {
+      away.push({
+        name: document.getElementById(`away-name-${i}`).value.trim() || `客隊${i+1}棒`,
+        pos: document.getElementById(`away-pos-${i}`).value.trim() || ""
+      });
+      home.push({
+        name: document.getElementById(`home-name-${i}`).value.trim() || `主隊${i+1}棒`,
+        pos: document.getElementById(`home-pos-${i}`).value.trim() || ""
+      });
     }
 
-    // 5. 比分與 R / H / E 統計同步
-    ['away', 'home'].forEach(t => {
-      let total = 0;
-      let hasScores = false;
-      for (let i = 1; i <= 9; i++) {
-        const val = data.scores && data.scores[t] && data.scores[t][i];
-        const cell = document.getElementById(`${t}-${i}`);
-        if (val !== undefined && val !== null && val !== "") {
-          cell.innerText = val;
-          total += parseInt(val, 10);
-          hasScores = true;
-        } else {
-          cell.innerText = "";
-        }
-      }
-      document.getElementById(`${t}-r`).innerText = hasScores ? total : "0";
-      document.getElementById(`score-${t}`).innerText = hasScores ? total : "0";
-
-      const hCount = (data.stats && data.stats[t] && data.stats[t].h) || 0;
-      const eCount = (data.stats && data.stats[t] && data.stats[t].e) || 0;
-      document.getElementById(`${t}-h`).innerText = hCount;
-      document.getElementById(`${t}-e`).innerText = eCount;
+    lineupRef.set({ away, home }).then(() => {
+      alert("✅ 先發名單已儲存並同步至 OBS！");
+      toggleLineupDrawer();
+    }).catch(err => {
+      alert("❌ 儲存失敗：" + err.message);
     });
-  }
-
-  renderUI(localState);
-
-  let db = null;
-  let stateRef = null;
-  let lineupRef = null;
-
-  try {
-    const firebaseConfig = {
-      databaseURL: "https://baseball-board-live-default-rtdb.firebaseio.com"
-    };
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const currentRoom = urlParams.get('room') || 'default';
-
-    stateRef = db.ref('games/' + currentRoom + '/gameState');
-    lineupRef = db.ref('games/' + currentRoom + '/lineups');
-
-    stateRef.on('value', (snap) => {
-      const data = snap.val();
-      if (data) {
-        localState = data;
-        renderUI(localState);
-      }
-    });
-
-    lineupRef.on('value', (snap) => {
-      const data = snap.val();
-      if (data) {
-        if (data.away && data.away.length) {
-          awayPlayers = data.away.map(p => ({
-            name: p.name,
-            pos: p.pos,
-            img: `players/${p.name}.png`
-          }));
-          initLineup("lineup-away", awayPlayers);
-        }
-        if (data.home && data.home.length) {
-          homePlayers = data.home.map(p => ({
-            name: p.name,
-            pos: p.pos,
-            img: `players/${p.name}.png`
-          }));
-          initLineup("lineup-home", homePlayers);
-        }
-        renderUI(localState);
-      }
-    });
-  } catch (err) {
-    console.log("Firebase 尚未配置或離線運作中，啟用本機控制模式。");
   }
 
   function updateState(modifierFn) {
-    localState = modifierFn(localState);
-    renderUI(localState);
-    if (stateRef) {
-      stateRef.set(localState);
-    }
+    stateRef.transaction((state) => {
+      if (!state) {
+        state = {
+          currentInning: 1, isBottom: false,
+          balls: 0, strikes: 0, outs: 0,
+          batterAway: 0, batterHome: 0,
+          bases: { 1: false, 2: false, 3: false },
+          scores: { away: {}, home: {} },
+          stats: { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } },
+          playerStats: { away: {}, home: {} }
+        };
+      }
+      return modifierFn(state);
+    });
   }
 
+  function ensureStatsStructure(s) {
+    if (!s.scores) s.scores = { away: {}, home: {} };
+    if (!s.scores.away) s.scores.away = {};
+    if (!s.scores.home) s.scores.home = {};
+    if (!s.stats) s.stats = { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } };
+    if (!s.stats.away) s.stats.away = { h: 0, e: 0 };
+    if (!s.stats.home) s.stats.home = { h: 0, e: 0 };
+    if (!s.playerStats) s.playerStats = { away: {}, home: {} };
+    if (!s.playerStats.away) s.playerStats.away = {};
+    if (!s.playerStats.home) s.playerStats.home = {};
+    if (!s.bases) s.bases = { 1: false, 2: false, 3: false };
+  }
+
+  // === 即時得分累加 / 倒扣 ===
+  function addRun(delta) {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const side = s.isBottom ? 'home' : 'away';
+      const curScore = parseInt(s.scores[side][s.currentInning], 10) || 0;
+      const nextScore = Math.max(0, curScore + delta);
+      s.scores[side][s.currentInning] = nextScore;
+      return s;
+    });
+  }
+
+  // === 純切換半局 ===
+  function switchHalfInning() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const side = s.isBottom ? 'home' : 'away';
+      // 若該半局沒得分，確保該局數記錄為 0
+      if (s.scores[side][s.currentInning] === undefined || s.scores[side][s.currentInning] === "") {
+        s.scores[side][s.currentInning] = 0;
+      }
+
+      if (!s.isBottom) {
+        s.isBottom = true;
+      } else {
+        s.isBottom = false;
+        s.currentInning = (s.currentInning || 1) + 1;
+      }
+      s.balls = 0; s.strikes = 0; s.outs = 0;
+      s.bases = { 1: false, 2: false, 3: false };
+      return s;
+    });
+  }
+
+  // === 打席結算快捷鍵 ===
+  function recordHit() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      s.stats[offTeam].h = (s.stats[offTeam].h || 0) + 1;
+
+      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
+      s.playerStats[offTeam][curIdx].h += 1;
+      s.playerStats[offTeam][curIdx].ab += 1;
+
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  function recordAtBatOut() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
+      s.playerStats[offTeam][curIdx].ab += 1;
+
+      s.outs = ((s.outs || 0) + 1) % 4;
+      s.balls = 0; s.strikes = 0;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  function recordBB() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  function recordError() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const defTeam = s.isBottom ? 'away' : 'home';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      s.stats[defTeam].e = (s.stats[defTeam].e || 0) + 1;
+
+      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
+      s.playerStats[offTeam][curIdx].ab += 1;
+
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  // === 基本控制 ===
   function addBall() {
     updateState(s => {
       s.balls = (s.balls || 0) + 1;
@@ -641,29 +470,16 @@
     });
   }
 
-  function switchHalfInning() {
+  function prevBatter() {
     updateState(s => {
-      const side = s.isBottom ? 'home' : 'away';
-      if (!s.scores) s.scores = { away: {}, home: {} };
-      if (!s.scores[side]) s.scores[side] = {};
-      if (s.scores[side][s.currentInning] === undefined || s.scores[side][s.currentInning] === "") {
-        s.scores[side][s.currentInning] = 0;
-      }
-
-      if (!s.isBottom) {
-        s.isBottom = true;
-      } else {
-        s.isBottom = false;
-        s.currentInning = (s.currentInning || 1) + 1;
-      }
-      s.balls = 0; s.strikes = 0; s.outs = 0;
-      s.bases = { 1: false, 2: false, 3: false };
+      if (!s.isBottom) s.batterAway = ((s.batterAway || 0) + 8) % 9;
+      else s.batterHome = ((s.batterHome || 0) + 8) % 9;
       return s;
     });
   }
 
   function resetEntireGame() {
-    const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分與紀錄將被清空！");
+    const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分、安打、失誤與紀錄將被清空！");
     if (!isConfirmed) return;
 
     const freshState = {
@@ -689,28 +505,21 @@
       }
     };
 
-    localState = freshState;
-    renderUI(localState);
-
     if (stateRef) {
-      stateRef.set(freshState);
+      stateRef.set(freshState).then(() => {
+        alert("✅ 比賽資料已全部清空，回歸第 1 局初！");
+      }).catch((err) => {
+        alert("❌ 重設失敗：" + err.message);
+      });
     }
   }
 
-  window.addEventListener('keydown', (e) => {
-    const key = e.key.toLowerCase();
-    if (key === 'b') { e.preventDefault(); addBall(); }
-    if (key === 's') { e.preventDefault(); addStrike(); }
-    if (key === 'o') { e.preventDefault(); addOut(); }
-    if (key === 'c') { e.preventDefault(); clearBS(); }
-    if (key === '1') { e.preventDefault(); toggleBase(1); }
-    if (key === '2') { e.preventDefault(); toggleBase(2); }
-    if (key === '3') { e.preventDefault(); toggleBase(3); }
-    if (key === 'x') { e.preventDefault(); clearBases(); }
-    if (key === 'n') { e.preventDefault(); nextBatter(); }
-    if (key === 'enter') { e.preventDefault(); switchHalfInning(); }
-  });
+  function changeRoom() {
+    const newRoom = document.getElementById('room-input').value.trim();
+    if (newRoom) {
+      window.location.href = window.location.pathname + '?room=' + encodeURIComponent(newRoom);
+    }
+  }
 </script>
-
 </body>
 </html>
