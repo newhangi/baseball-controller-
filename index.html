@@ -11,6 +11,7 @@
     .section-title { font-size: 13px; color: #64748b; margin: 12px 0 6px 0; font-weight: bold; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
     .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
     
     button {
       padding: 16px 8px;
@@ -30,6 +31,13 @@
     .btn-blue { background: #2563eb; }
     .btn-slate { background: #334155; }
     .btn-orange { background: #ea580c; grid-column: span 2; }
+    
+    /* 打席快捷鍵樣式 */
+    .btn-hit { background: #047857; border: 1px solid #10b981; }
+    .btn-bb { background: #b45309; border: 1px solid #f59e0b; }
+    .btn-error { background: #7c2d12; border: 1px solid #ea580c; }
+    .btn-out-atbat { background: #b91c1c; border: 1px solid #f87171; }
+
     .btn-reset {
       background: #334155;
       color: #f87171;
@@ -147,7 +155,15 @@
   </div>
   <button class="btn-slate" style="width: 100%; margin-bottom: 10px;" onclick="clearBases()">清空所有壘包</button>
 
-  <div class="section-title">比賽推進</div>
+  <div class="section-title">打席結算（自動連動 H / E / 成績）</div>
+  <div class="grid-4">
+    <button class="btn-hit" onclick="recordHit()">🟢 安打 (H)</button>
+    <button class="btn-out-atbat" onclick="recordAtBatOut()">🔴 出局 (Out)</button>
+    <button class="btn-bb" onclick="recordBB()">🟡 保送 (BB)</button>
+    <button class="btn-error" onclick="recordError()">⚠️ 對方失誤 (E)</button>
+  </div>
+
+  <div class="section-title">手動比賽推進</div>
   <div class="grid-2">
     <button class="btn-blue" onclick="nextBatter()">下一棒</button>
     <button class="btn-blue" onclick="prevBatter()">上一棒</button>
@@ -207,7 +223,6 @@
     { name: "第七棒", pos: "SS" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "1B" }
   ];
 
-  // 動態生成輸入格
   function renderInputRows(containerId, list, prefix) {
     const container = document.getElementById(containerId);
     container.innerHTML = "";
@@ -224,7 +239,6 @@
   renderInputRows("away-inputs", defaultAway, "away");
   renderInputRows("home-inputs", defaultHome, "home");
 
-  // 從資料庫載入最新打線
   lineupRef.on('value', (snap) => {
     const data = snap.val();
     if (data) {
@@ -233,7 +247,6 @@
     }
   });
 
-  // 折疊切換
   function toggleLineupDrawer() {
     const drawer = document.getElementById('lineup-drawer');
     const arrow = document.getElementById('accordion-arrow');
@@ -242,7 +255,6 @@
     arrow.innerText = isHidden ? '▲ 點擊收合' : '▼ 點擊展開';
   }
 
-  // 儲存打線至 Firebase
   function saveLineups() {
     const away = [];
     const home = [];
@@ -265,7 +277,7 @@
     });
   }
 
-  // 計分控制邏輯
+  // 狀態同步底層函式
   function updateState(modifierFn) {
     stateRef.transaction((state) => {
       if (!state) {
@@ -274,13 +286,112 @@
           balls: 0, strikes: 0, outs: 0,
           batterAway: 0, batterHome: 0,
           bases: { 1: false, 2: false, 3: false },
-          scores: { away: {}, home: {} }
+          scores: { away: {}, home: {} },
+          stats: { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } },
+          playerStats: { away: {}, home: {} }
         };
       }
       return modifierFn(state);
     });
   }
 
+  // 輔助函式：確保各統計節點存在
+  function ensureStatsStructure(s) {
+    if (!s.stats) s.stats = { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } };
+    if (!s.stats.away) s.stats.away = { h: 0, e: 0 };
+    if (!s.stats.home) s.stats.home = { h: 0, e: 0 };
+    if (!s.playerStats) s.playerStats = { away: {}, home: {} };
+    if (!s.playerStats.away) s.playerStats.away = {};
+    if (!s.playerStats.home) s.playerStats.home = {};
+    if (!s.bases) s.bases = { 1: false, 2: false, 3: false };
+  }
+
+  // === 打席結算快捷鍵邏輯 ===
+
+  // 1. 安打 (H)
+  function recordHit() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      // 團隊安打數 +1
+      s.stats[offTeam].h = (s.stats[offTeam].h || 0) + 1;
+
+      // 打者個人安打數 +1、打數 +1
+      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
+      s.playerStats[offTeam][curIdx].h += 1;
+      s.playerStats[offTeam][curIdx].ab += 1;
+
+      // 清空球數、上壘、跳下一棒
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  // 2. 出局 (Out)
+  function recordAtBatOut() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      // 打者打數 +1、安打 +0
+      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
+      s.playerStats[offTeam][curIdx].ab += 1;
+
+      // 出局數 +1、清空球數、跳下一棒
+      s.outs = ((s.outs || 0) + 1) % 4;
+      s.balls = 0; s.strikes = 0;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  // 3. 保送 (BB) - 不計打數
+  function recordBB() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      // 清空球數、一壘上壘、跳下一棒
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  // 4. 對方失誤 (E)
+  function recordError() {
+    updateState(s => {
+      ensureStatsStructure(s);
+      const offTeam = s.isBottom ? 'home' : 'away';
+      const defTeam = s.isBottom ? 'away' : 'home';
+      const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
+
+      // 守備方失誤 +1
+      s.stats[defTeam].e = (s.stats[defTeam].e || 0) + 1;
+
+      // 打者打數 +1、安打 +0
+      if (!s.playerStats[offTeam][curIdx]) s.playerStats[offTeam][curIdx] = { h: 0, ab: 0 };
+      s.playerStats[offTeam][curIdx].ab += 1;
+
+      // 清空球數、上壘、跳下一棒
+      s.balls = 0; s.strikes = 0;
+      s.bases[1] = true;
+      if (!s.isBottom) s.batterAway = (curIdx + 1) % 9;
+      else s.batterHome = (curIdx + 1) % 9;
+      return s;
+    });
+  }
+
+  // === 基礎球數與壘包控制 ===
   function addBall() {
     updateState(s => {
       s.balls = (s.balls || 0) + 1;
@@ -367,8 +478,9 @@
     }
   }
 
+  // 全新比賽重設
   function resetEntireGame() {
-    const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分與紀錄將被清空！");
+    const isConfirmed = confirm("⚠️ 確定要重設整場比賽資料嗎？所有得分、安打、失誤與紀錄將被清空！");
     if (!isConfirmed) return;
 
     const freshState = {
@@ -383,6 +495,14 @@
       scores: {
         away: { 1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "" },
         home: { 1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "" }
+      },
+      stats: {
+        away: { h: 0, e: 0 },
+        home: { h: 0, e: 0 }
+      },
+      playerStats: {
+        away: { 0: {h:0, ab:0}, 1: {h:0, ab:0}, 2: {h:0, ab:0}, 3: {h:0, ab:0}, 4: {h:0, ab:0}, 5: {h:0, ab:0}, 6: {h:0, ab:0}, 7: {h:0, ab:0}, 8: {h:0, ab:0} },
+        home: { 0: {h:0, ab:0}, 1: {h:0, ab:0}, 2: {h:0, ab:0}, 3: {h:0, ab:0}, 4: {h:0, ab:0}, 5: {h:0, ab:0}, 6: {h:0, ab:0}, 7: {h:0, ab:0}, 8: {h:0, ab:0} }
       }
     };
 
