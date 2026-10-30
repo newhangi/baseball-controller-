@@ -212,12 +212,12 @@
     away: [
       { name: "James", pos: "2B" }, { name: "Bryan", pos: "CF" }, { name: "Justin", pos: "SS" },
       { name: "第四棒", pos: "3B" }, { name: "第五棒", pos: "1B" }, { name: "第六棒", pos: "LF" },
-      { name: "第七棒", pos: "DH" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "RF" }
+      { name: "第七棒", pos: "DH" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "P" }
     ],
     home: [
       { name: "第一棒", pos: "3B" }, { name: "第二棒", pos: "2B" }, { name: "第三棒", pos: "RF" },
       { name: "第四棒", pos: "DH" }, { name: "第五棒", pos: "CF" }, { name: "第六棒", pos: "LF" },
-      { name: "第七棒", pos: "SS" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "1B" }
+      { name: "第七棒", pos: "SS" }, { name: "第八棒", pos: "C" }, { name: "第九棒", pos: "P" }
     ]
   };
 
@@ -285,7 +285,8 @@
           bases: { 1: false, 2: false, 3: false },
           scores: { away: {}, home: {} },
           stats: { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } },
-          playerHistory: {}
+          playerHistory: {},
+          pitcherStats: {}
         };
       }
       return modifierFn(state);
@@ -301,6 +302,21 @@
     if (!s.stats.home) s.stats.home = { h: 0, e: 0 };
     if (!s.playerHistory) s.playerHistory = {};
     if (!s.bases) s.bases = { 1: false, 2: false, 3: false };
+    if (!s.pitcherStats) s.pitcherStats = {};
+  }
+
+  // 取得當前「防守方」守位為 P 的投手姓名
+  function getCurrentPitcherName(isBottom) {
+    const defLineup = isBottom ? currentLineups.away : currentLineups.home;
+    const pitcher = defLineup.find(p => p.pos && p.pos.trim().toUpperCase() === 'P');
+    return pitcher ? pitcher.name : "投手";
+  }
+
+  // 輔助函式：讓當前防守方投手球數 +1
+  function addPitchCount(s) {
+    ensureStatsStructure(s);
+    const pName = getCurrentPitcherName(s.isBottom);
+    s.pitcherStats[pName] = (s.pitcherStats[pName] || 0) + 1;
   }
 
   // 取得當前打者姓名
@@ -309,9 +325,59 @@
     return (list[curIdx] && list[curIdx].name) ? list[curIdx].name : (isBottom ? `主隊${curIdx+1}棒` : `客隊${curIdx+1}棒`);
   }
 
+  // === 各按鈕事件連動投手球數 ===
+  function addBall() {
+    updateState(s => {
+      s.balls = (s.balls || 0) + 1;
+      addPitchCount(s); // 壞球算 1 球
+      if (s.balls >= 4) {
+        s.balls = 0; s.strikes = 0;
+        if (!s.bases) s.bases = {};
+        s.bases[1] = true;
+      }
+      return s;
+    });
+  }
+
+  function addStrike() {
+    updateState(s => {
+      s.strikes = (s.strikes || 0) + 1;
+      addPitchCount(s); // 好球算 1 球
+      if (s.strikes >= 3) {
+        s.balls = 0; s.strikes = 0;
+        s.outs = (s.outs || 0) + 1;
+      }
+      return s;
+    });
+  }
+
+  function addOut() {
+    updateState(s => {
+      s.outs = ((s.outs || 0) + 1) % 4;
+      return s;
+    });
+  }
+
+  function clearBS() {
+    updateState(s => { s.balls = 0; s.strikes = 0; return s; });
+  }
+
+  function toggleBase(num) {
+    updateState(s => {
+      if (!s.bases) s.bases = {};
+      s.bases[num] = !s.bases[num];
+      return s;
+    });
+  }
+
+  function clearBases() {
+    updateState(s => { s.bases = { 1: false, 2: false, 3: false }; return s; });
+  }
+
   function recordHit() {
     updateState(s => {
       ensureStatsStructure(s);
+      addPitchCount(s); // 安打算 1 球
       const offTeam = s.isBottom ? 'home' : 'away';
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
       const playerName = getCurrentBatterName(s.isBottom, curIdx);
@@ -335,6 +401,7 @@
   function recordAtBatOut() {
     updateState(s => {
       ensureStatsStructure(s);
+      addPitchCount(s); // 出局算 1 球
       const offTeam = s.isBottom ? 'home' : 'away';
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
       const playerName = getCurrentBatterName(s.isBottom, curIdx);
@@ -355,6 +422,7 @@
   function recordBB() {
     updateState(s => {
       ensureStatsStructure(s);
+      addPitchCount(s); // 四壞保送算 1 球
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
       const playerName = getCurrentBatterName(s.isBottom, curIdx);
 
@@ -373,6 +441,7 @@
   function recordError() {
     updateState(s => {
       ensureStatsStructure(s);
+      addPitchCount(s); // 失誤算 1 球
       const offTeam = s.isBottom ? 'home' : 'away';
       const defTeam = s.isBottom ? 'away' : 'home';
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
@@ -424,52 +493,6 @@
     });
   }
 
-  function addBall() {
-    updateState(s => {
-      s.balls = (s.balls || 0) + 1;
-      if (s.balls >= 4) {
-        s.balls = 0; s.strikes = 0;
-        if (!s.bases) s.bases = {};
-        s.bases[1] = true;
-      }
-      return s;
-    });
-  }
-
-  function addStrike() {
-    updateState(s => {
-      s.strikes = (s.strikes || 0) + 1;
-      if (s.strikes >= 3) {
-        s.balls = 0; s.strikes = 0;
-        s.outs = (s.outs || 0) + 1;
-      }
-      return s;
-    });
-  }
-
-  function addOut() {
-    updateState(s => {
-      s.outs = ((s.outs || 0) + 1) % 4;
-      return s;
-    });
-  }
-
-  function clearBS() {
-    updateState(s => { s.balls = 0; s.strikes = 0; return s; });
-  }
-
-  function toggleBase(num) {
-    updateState(s => {
-      if (!s.bases) s.bases = {};
-      s.bases[num] = !s.bases[num];
-      return s;
-    });
-  }
-
-  function clearBases() {
-    updateState(s => { s.bases = { 1: false, 2: false, 3: false }; return s; });
-  }
-
   function nextBatter() {
     updateState(s => {
       if (!s.isBottom) s.batterAway = ((s.batterAway || 0) + 1) % 9;
@@ -508,7 +531,8 @@
         away: { h: 0, e: 0 },
         home: { h: 0, e: 0 }
       },
-      playerHistory: {}
+      playerHistory: {},
+      pitcherStats: {}
     };
 
     if (stateRef) {
