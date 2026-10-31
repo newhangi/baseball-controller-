@@ -183,6 +183,12 @@
   </button>
 
   <div class="lineup-drawer" id="lineup-drawer">
+    <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+      <input type="text" id="team-name-away" placeholder="客隊(先攻)隊名" value="到齊" style="flex:1; background:#1f2937; color:#fff; border:1px solid #374151; padding:8px 6px; border-radius:4px; font-weight:bold; font-size:13px; text-align:center;">
+      <button type="button" onclick="swapHomeAway()" style="padding: 8px 10px; background:#475569; font-size:12px; border-radius:4px; border:none; color:#fff; white-space:nowrap; font-weight:bold;">🔄 攻守對調</button>
+      <input type="text" id="team-name-home" placeholder="主隊(後攻)隊名" value="友隊" style="flex:1; background:#1f2937; color:#fff; border:1px solid #374151; padding:8px 6px; border-radius:4px; font-weight:bold; font-size:13px; text-align:center;">
+    </div>
+
     <div class="lineup-table-title" style="color: #ef4444;">🔴 客隊打線（先攻）</div>
     <div id="away-inputs"></div>
 
@@ -242,6 +248,10 @@
     if (data) {
       if (data.away) { currentLineups.away = data.away; renderInputRows("away-inputs", data.away, "away"); }
       if (data.home) { currentLineups.home = data.home; renderInputRows("home-inputs", data.home, "home"); }
+      if (data.teamNames) {
+        if (data.teamNames.away) document.getElementById("team-name-away").value = data.teamNames.away;
+        if (data.teamNames.home) document.getElementById("team-name-home").value = data.teamNames.home;
+      }
     }
   });
 
@@ -253,6 +263,29 @@
     arrow.innerText = isHidden ? '▲ 點擊收合' : '▼ 點擊展開';
   }
 
+  // 一鍵對調主客隊名與 9 人打線
+  function swapHomeAway() {
+    // 對調隊名輸入框
+    const awayNameInput = document.getElementById("team-name-away");
+    const homeNameInput = document.getElementById("team-name-home");
+    const tempName = awayNameInput.value;
+    awayNameInput.value = homeNameInput.value;
+    homeNameInput.value = tempName;
+
+    // 對調 1~9 棒姓名與守位輸入框
+    for (let i = 0; i < 9; i++) {
+      const aName = document.getElementById(`away-name-${i}`);
+      const aPos = document.getElementById(`away-pos-${i}`);
+      const hName = document.getElementById(`home-name-${i}`);
+      const hPos = document.getElementById(`home-pos-${i}`);
+
+      const tN = aName.value; const tP = aPos.value;
+      aName.value = hName.value; aPos.value = hPos.value;
+      hName.value = tN; hPos.value = tP;
+    }
+  }
+
+  // 儲存先發名單與隊名
   function saveLineups() {
     const away = [];
     const home = [];
@@ -267,8 +300,13 @@
       });
     }
 
-    lineupRef.set({ away, home }).then(() => {
-      alert("✅ 先發名單已儲存並同步至 OBS！");
+    const teamNames = {
+      away: document.getElementById("team-name-away").value.trim() || "客隊",
+      home: document.getElementById("team-name-home").value.trim() || "主隊"
+    };
+
+    lineupRef.set({ away, home, teamNames }).then(() => {
+      alert("✅ 先發名單與隊名已儲存並同步至 OBS！");
       toggleLineupDrawer();
     }).catch(err => {
       alert("❌ 儲存失敗：" + err.message);
@@ -329,7 +367,7 @@
   function addBall() {
     updateState(s => {
       s.balls = (s.balls || 0) + 1;
-      addPitchCount(s); // 壞球算 1 球
+      addPitchCount(s);
       if (s.balls >= 4) {
         s.balls = 0; s.strikes = 0;
         if (!s.bases) s.bases = {};
@@ -342,7 +380,7 @@
   function addStrike() {
     updateState(s => {
       s.strikes = (s.strikes || 0) + 1;
-      addPitchCount(s); // 好球算 1 球
+      addPitchCount(s);
       if (s.strikes >= 3) {
         s.balls = 0; s.strikes = 0;
         s.outs = (s.outs || 0) + 1;
@@ -377,7 +415,7 @@
   function recordHit() {
     updateState(s => {
       ensureStatsStructure(s);
-      addPitchCount(s); // 安打算 1 球
+      addPitchCount(s);
       const offTeam = s.isBottom ? 'home' : 'away';
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
       const playerName = getCurrentBatterName(s.isBottom, curIdx);
@@ -401,7 +439,7 @@
   function recordAtBatOut() {
     updateState(s => {
       ensureStatsStructure(s);
-      addPitchCount(s); // 出局算 1 球
+      addPitchCount(s);
       const offTeam = s.isBottom ? 'home' : 'away';
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
       const playerName = getCurrentBatterName(s.isBottom, curIdx);
@@ -422,7 +460,7 @@
   function recordBB() {
     updateState(s => {
       ensureStatsStructure(s);
-      addPitchCount(s); // 四壞保送算 1 球
+      addPitchCount(s);
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
       const playerName = getCurrentBatterName(s.isBottom, curIdx);
 
@@ -441,7 +479,7 @@
   function recordError() {
     updateState(s => {
       ensureStatsStructure(s);
-      addPitchCount(s); // 失誤算 1 球
+      addPitchCount(s);
       const offTeam = s.isBottom ? 'home' : 'away';
       const defTeam = s.isBottom ? 'away' : 'home';
       const curIdx = s.isBottom ? (s.batterHome || 0) : (s.batterAway || 0);
