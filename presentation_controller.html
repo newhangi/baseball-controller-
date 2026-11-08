@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>單人直播手機控制器</title>
+  <!-- 免費雲端通訊庫 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --bg: #090e17;
+      --card-bg: #121c2d;
+      --card-active: #1e3355;
+      --primary: #4df3ff;
+      --accent: #ffde59;
+      --danger: #ff4d4d;
+      --border: #2a3d66;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: #ffffff;
+      padding: 16px;
+      padding-bottom: 40px;
+    }
+
+    /* 頂部連線狀態列 */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #888;
+      margin-right: 6px;
+    }
+    .status-indicator.online { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+
+    /* 快捷功能列（下一位提示、黑幕） */
+    .quick-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .action-btn {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: bold;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .action-btn:active { opacity: 0.7; }
+    .action-btn.active-warn { background: #664400; border-color: var(--accent); color: var(--accent); }
+
+    /* 校長名單卡片 */
+    .section-title {
+      font-size: 14px;
+      color: var(--primary);
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+
+    .speaker-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .speaker-card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .speaker-card.active {
+      border-color: var(--accent);
+      background: var(--card-active);
+      box-shadow: 0 0 12px rgba(255, 222, 89, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .speaker-name {
+      font-size: 20px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+    .speaker-card.active .speaker-name {
+      color: var(--accent);
+    }
+
+    .speaker-tag {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #ccc;
+    }
+
+    .speaker-slogan {
+      font-size: 13px;
+      color: #a0aec0;
+      line-height: 1.4;
+    }
+
+    /* 底部當前同步資訊 */
+    .current-display {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(9, 14, 23, 0.95);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #8fa0be;
+    }
+    .current-name {
+      color: var(--accent);
+      font-weight: bold;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 連線狀態 -->
+  <div class="status-bar">
+    <div>
+      <span class="status-indicator" id="statusDot"></span>
+      <span id="statusText">伺服器連線中...</span>
+    </div>
+    <div style="color: #64748b;">頻道: <span style="color: var(--primary);">2026-LIVE</span></div>
+  </div>
+
+  <!-- 特殊場景按鍵 -->
+  <div class="quick-actions">
+    <button class="action-btn" id="nextBtn" onclick="toggleNextOverlay()">
+      ⏭ 轉場下一位
+    </button>
+    <button class="action-btn" id="blankBtn" onclick="toggleBlank()">
+      ⏸ 準備 / 休息幕
+    </button>
+  </div>
+
+  <!-- 校長列表 -->
+  <div class="section-title">候用校長發表現場切換 (輕點即換)</div>
+  <div class="speaker-list" id="cardContainer"></div>
+
+  <!-- 當前畫面指示 -->
+  <div class="current-display">
+    <div>當前 OBS 顯示：<span class="current-name" id="currentLabel">尚未選擇</span></div>
+    <button onclick="resendCurrent()" style="padding: 4px 8px; border-radius: 4px; border: none; background: #2a3d66; color: #fff; font-size: 12px;">重發</button>
+  </div>
+
+  <script>
+    // 10 位候用校長資料設定
+    const speakers = [
+      { id: 1, name: "陳秋貝", term: "第28期候用校長", slogan: "以溫度引領、以專業實踐，成就師生與學校共好願景" },
+      { id: 2, name: "王大同", term: "第28期候用校長", slogan: "科技賦能創新，厚植學生跨域核心素養" },
+      { id: 3, name: "李小美", term: "第28期候用校長", slogan: "適性揚才無極限，讓每位孩子找到發光的舞台" },
+      { id: 4, name: "張文華", term: "第28期候用校長", slogan: "友善溫馨活力校園，深化品格共創卓越未來" },
+      { id: 5, name: "趙志強", term: "第28期候用校長", slogan: "深化雙語跨國鏈結，拓展新世代世界競爭力" },
+      { id: 6, name: "林玉玲", term: "第28期候用校長", slogan: "深耕閱讀與多元美感，培育終身自主學習力" },
+      { id: 7, name: "黃俊傑", term: "第28期候用校長", slogan: "引進社區與外部資源，建構緊密夥伴共好生態系" },
+      { id: 8, name: "吳雅芳", term: "第28期候用校長", slogan: "全方位弱勢關懷，堅持一個孩子都不能少" },
+      { id: 9, name: "鄭立德", term: "第28期候用校長", slogan: "創新思維翻轉教學，引領親師生持續前進" },
+      { id: 10, name: "劉慧珍", term: "第28期候用校長", slogan: "穩健行政溫暖溝通，攜手營造幸福智慧校園" }
+    ];
+
+    // MQTT 連線通道（請設定一個專屬字串）
+    const TOPIC = "taoyuan-live-controller-x883";
+    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+    let currentActiveIndex = -1;
+    let isNextMode = false;
+
+    // 介面渲染
+    const container = document.getElementById('cardContainer');
+    speakers.forEach((item, index) => {
+      const card = document.createElement('div');
+      card.className = 'speaker-card';
+      card.id = `card-${index}`;
+      card.innerHTML = `
+        <div class="card-header">
+          <span class="speaker-name">${item.id}. ${item.name}</span>
+          <span class="speaker-tag">${item.term}</span>
+        </div>
+        <div class="speaker-slogan">${item.slogan}</div>
+      `;
+      card.onclick = () => selectSpeaker(index);
+      container.appendChild(card);
+    });
+
+    // 連線狀態監聽
+    client.on('connect', () => {
+      document.getElementById('statusDot').classList.add('online');
+      document.getElementById('statusText').innerText = "連線就緒 (控制台啟用)";
+      document.getElementById('statusText').style.color = "#00ff88";
+    });
+
+    client.on('offline', () => {
+      document.getElementById('statusDot').classList.remove('online');
+      document.getElementById('statusText').innerText = "網路中斷連線中...";
+      document.getElementById('statusText').style.color = "#ff4d4d";
+    });
+
+    // 切換校長
+    function selectSpeaker(index) {
+      currentActiveIndex = index;
+      const data = speakers[index];
+
+      // 更新控制器畫面樣式
+      document.querySelectorAll('.speaker-card').forEach(c => c.classList.remove('active'));
+      document.getElementById(`card-${index}`).classList.add('active');
+      document.getElementById('currentLabel').innerText = `${data.id}. ${data.name}`;
+
+      // 手機輕微震動回饋 (支援的裝置)
+      if (navigator.vibrate) navigator.vibrate(40);
+
+      // 發送 MQTT 廣播通知 OBS
+      const payload = {
+        action: "switchSpeaker",
+        name: data.name,
+        term: data.term,
+        slogan: data.slogan
+      };
+      client.publish(TOPIC, JSON.stringify(payload));
+    }
+
+    // 重新發送當前選中資料
+    function resendCurrent() {
+      if (currentActiveIndex >= 0) selectSpeaker(currentActiveIndex);
+    }
+
+    // 切換 NEXT 橫條
+    function toggleNextOverlay() {
+      isNextMode = !isNextMode;
+      const btn = document.getElementById('nextBtn');
+      btn.classList.toggle('active-warn', isNextMode);
+      
+      client.publish(TOPIC, JSON.stringify({
+        action: "toggleNext",
+        show: isNextMode
+      }));
+    }
+
+    // 切換休息畫面
+    function toggleBlank() {
+      const isConfirmed = confirm("確定切換為「休息/準備中」畫面嗎？");
+      if (isConfirmed) {
+        client.publish(TOPIC, JSON.stringify({ action: "toggleBlank" }));
+      }
+    }
+  </script>
+</body>
+</html>
