@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>直播控制器 (支援頻道參數與名單擴充)</title>
-  <!-- 免費雲端 MQTT 通訊庫 -->
+  <title>直播控制器 (支援全欄位自訂)</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     :root {
@@ -79,7 +78,6 @@
       border-color: var(--primary);
     }
 
-    /* 快捷功能列 */
     .quick-actions {
       display: grid;
       grid-template-columns: 1.5fr 1fr;
@@ -111,7 +109,6 @@
       opacity: 0.8;
     }
 
-    /* 表單區塊 */
     .custom-box {
       background: var(--card-bg);
       border: 1.5px solid var(--border);
@@ -185,7 +182,6 @@
       cursor: pointer;
     }
 
-    /* 卡片列表 */
     .speaker-list {
       display: flex;
       flex-direction: column;
@@ -261,7 +257,6 @@
       cursor: pointer;
     }
 
-    /* 底部狀態列 */
     .current-display {
       position: fixed;
       bottom: 0;
@@ -326,7 +321,7 @@
   <div id="viewCustom" style="display: none;">
     <!-- 活動全域設定區塊 -->
     <div class="custom-box">
-      <div class="box-header-title">📌 說明會整體設定 (頂部標題與地點)</div>
+      <div class="box-header-title">📌 說明會整體設定</div>
       <div class="form-group">
         <label>頂部主標題文字</label>
         <input type="text" id="inputMainTitle" placeholder="例如：115學年度國民中學候用校長辦學理念公開說明會">
@@ -335,8 +330,12 @@
         <label>右上角現場地點文字</label>
         <input type="text" id="inputVenue" placeholder="例如：【說明會現場 ｜ 桃園國中演藝廳】">
       </div>
+      <div class="form-group">
+        <label>最下方跑馬副標題文字</label>
+        <input type="text" id="inputSubTitle" placeholder="例如：候用校長甄選發表會">
+      </div>
       <div class="form-btns">
-        <button class="btn-submit" onclick="sendEventConfig()">⚡ 更新說明會標題與地點</button>
+        <button class="btn-submit" onclick="sendEventConfig()">⚡ 更新說明會所有文字</button>
       </div>
     </div>
 
@@ -372,9 +371,6 @@
 王大同, 第28期候用校長, 科技賦能創新，厚植學生素養
 李小美, 第28期候用校長, 適性揚才，讓孩子發光"></textarea>
       </div>
-      <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
-        * 可直接從 Excel 複製三欄（姓名、期別、標語）貼入，逗號或 Tab 均可識別。
-      </div>
       <div class="form-btns">
         <button class="btn-submit" onclick="importBatch(false)">➕ 追加到現有名單</button>
         <button class="btn-save" style="background:#5a1e1e; border-color:#ff4d4d;" onclick="importBatch(true)">⚠️ 覆蓋現有名單</button>
@@ -407,25 +403,24 @@
 
     let speakers = JSON.parse(localStorage.getItem('stream_speakers')) || DEFAULT_SPEAKERS;
 
-    // 讀取網址上的 ?room= 參數，與 OBS 保持一致
     const urlParams = new URLSearchParams(window.location.search);
     const roomID = urlParams.get('room') || "taoyuan-live-controller-x883";
     const TOPIC = `stream-room-${roomID}`;
 
     document.getElementById('roomLabel').textContent = urlParams.get('room') || "預設";
 
-    // 讀取本地儲存的活動標題與地點
     let currentMainTitle = localStorage.getItem('stream_main_title') || "115學年度國民中學候用校長辦學理念公開說明會";
     let currentVenue = localStorage.getItem('stream_venue') || "【說明會現場 ｜ 桃園國中演藝廳】";
+    let currentSubTitle = localStorage.getItem('stream_sub_title') || "候用校長甄選發表會";
 
     const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
     let currentIndex = -1;
     let isNextMode = false;
 
-    // 初始化設定框文字
     document.getElementById('inputMainTitle').value = currentMainTitle;
     document.getElementById('inputVenue').value = currentVenue;
+    document.getElementById('inputSubTitle').value = currentSubTitle;
 
     client.on('connect', () => {
       document.getElementById('statusDot').classList.add('online');
@@ -444,25 +439,25 @@
     function sendEventConfig() {
       const title = document.getElementById('inputMainTitle').value.trim();
       const venue = document.getElementById('inputVenue').value.trim();
-
-      if (!title && !venue) {
-        alert("請輸入標題或地點！");
-        return;
-      }
+      const subTitle = document.getElementById('inputSubTitle').value.trim();
 
       currentMainTitle = title;
       currentVenue = venue;
+      currentSubTitle = subTitle;
+
       localStorage.setItem('stream_main_title', currentMainTitle);
       localStorage.setItem('stream_venue', currentVenue);
+      localStorage.setItem('stream_sub_title', currentSubTitle);
 
       client.publish(TOPIC, JSON.stringify({
         action: "updateConfig",
         title: currentMainTitle,
-        venue: currentVenue
+        venue: currentVenue,
+        subTitle: currentSubTitle
       }));
 
       if (navigator.vibrate) navigator.vibrate(40);
-      alert("✅ 說明會標題與地點已同步更新至 OBS！");
+      alert("✅ 說明會設定文字已同步更新至 OBS！");
     }
 
     function renderCards() {
@@ -717,7 +712,8 @@
       client.publish(TOPIC, JSON.stringify({
         action: "updateConfig",
         title: currentMainTitle,
-        venue: currentVenue
+        venue: currentVenue,
+        subTitle: currentSubTitle
       }));
     }
 
