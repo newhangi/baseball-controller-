@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Presentation Overlay</title>
+  <!-- 免費雲端通訊庫 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: transparent;
+      color: #ffffff;
+      position: relative;
+    }
+
+    /* 頂部主題橫幅 */
+    .top-banner {
+      position: absolute;
+      top: 24px;
+      left: 100px;
+      right: 580px;
+      height: 70px;
+      border: 2px solid #5b7fff;
+      border-radius: 8px;
+      background: rgba(10, 20, 50, 0.88);
+      box-shadow: 0 0 15px rgba(0, 150, 255, 0.4);
+      display: flex;
+      align-items: center;
+      padding: 0 25px;
+      gap: 20px;
+    }
+
+    .arrows {
+      color: #4df3ff;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -2px;
+    }
+
+    .main-title {
+      font-size: 30px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      transition: opacity 0.3s ease;
+    }
+
+    /* 左側簡報區（鏤空留給 OBS PPT 視窗） */
+    .main-frame {
+      position: absolute;
+      top: 110px;
+      left: 100px;
+      width: 1240px;
+      height: 820px;
+      border: 3px solid #3c65d6;
+      box-shadow: inset 0 0 20px rgba(60, 101, 214, 0.3);
+      background: transparent;
+    }
+
+    /* 底部標語條 */
+    .bottom-bar {
+      position: absolute;
+      bottom: 40px;
+      left: 100px;
+      width: 1240px;
+      height: 50px;
+      border: 2px solid #3c65d6;
+      border-radius: 6px;
+      background: rgba(10, 20, 50, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      letter-spacing: 4px;
+      color: #d1e4ff;
+      transition: opacity 0.3s ease;
+    }
+
+    /* 右側資訊與視訊框 */
+    .right-panel {
+      position: absolute;
+      top: 24px;
+      right: 80px;
+      width: 440px;
+      height: 980px;
+      border: 2px solid #5b7fff;
+      border-radius: 12px;
+      background: rgba(12, 18, 42, 0.75);
+      box-shadow: 0 0 20px rgba(0, 150, 255, 0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .location-tag {
+      font-size: 18px;
+      color: #d0dcff;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+
+    /* 時鐘容器 */
+    .clock-container {
+      width: 120px;
+      height: 120px;
+      border: 3px solid #6c8cff;
+      border-radius: 50%;
+      position: relative;
+      margin-bottom: 25px;
+      box-shadow: 0 0 10px rgba(108, 140, 255, 0.5);
+    }
+
+    .hand {
+      position: absolute;
+      bottom: 50%;
+      left: 50%;
+      transform-origin: bottom center;
+      background: #ffffff;
+      border-radius: 2px;
+    }
+    .hour-hand { width: 4px; height: 32px; margin-left: -2px; }
+    .min-hand  { width: 3px; height: 45px; margin-left: -1.5px; }
+    .sec-hand  { width: 1.5px; height: 50px; margin-left: -0.75px; background: #4df3ff; }
+
+    /* 講者視訊畫面鏤空區 */
+    .camera-cutout {
+      width: 380px;
+      height: 600px;
+      border: 2px solid #8ba4f8;
+      border-radius: 10px;
+      background: transparent;
+    }
+
+    /* 講者姓名標牌 */
+    .speaker-info {
+      margin-top: 25px;
+      text-align: center;
+      transition: opacity 0.3s ease;
+    }
+
+    .speaker-term {
+      font-size: 24px;
+      letter-spacing: 1px;
+      color: #c0d4ff;
+      margin-bottom: 6px;
+    }
+
+    .speaker-name {
+      font-size: 42px;
+      font-weight: 900;
+      color: #ffde59;
+      letter-spacing: 6px;
+      text-shadow: 0 0 12px rgba(255, 222, 89, 0.6);
+    }
+
+    /* 切換文字時的淡入淡出樣式 */
+    .fade-out {
+      opacity: 0;
+    }
+
+    /* NEXT 轉場橫條提示 */
+    .next-banner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(4, 9, 20, 0.88);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      flex-direction: column;
+    }
+    .next-banner.active { display: flex; }
+    .next-text { font-size: 64px; font-weight: 900; color: #4df3ff; letter-spacing: 8px; text-shadow: 0 0 20px #4df3ff; }
+  </style>
+</head>
+<body>
+
+  <!-- 頂部標題列 -->
+  <div class="top-banner">
+    <div class="arrows">&gt;&gt;&gt;</div>
+    <div class="main-title" id="mainTitle">115學年度國民中學候用校長辦學理念公開說明會</div>
+  </div>
+
+  <!-- 左側簡報鏤空區 -->
+  <div class="main-frame"></div>
+
+  <!-- 底部理念標語 -->
+  <div class="bottom-bar" id="sloganText">教育善好 顧好下一代</div>
+
+  <!-- 右側資訊與視訊框 -->
+  <div class="right-panel">
+    <div class="location-tag">【說明會現場 ｜ 桃園國中演藝廳】</div>
+    
+    <!-- 類比時鐘 -->
+    <div class="clock-container">
+      <div class="hand hour-hand" id="hourHand"></div>
+      <div class="hand min-hand" id="minHand"></div>
+      <div class="hand sec-hand" id="secHand"></div>
+    </div>
+
+    <!-- 鏡頭鏤空區 -->
+    <div class="camera-cutout"></div>
+
+    <!-- 講者姓名標牌 -->
+    <div class="speaker-info" id="speakerBox">
+      <div class="speaker-term" id="speakerTerm">第28期候用校長</div>
+      <div class="speaker-name" id="speakerName">陳秋貝</div>
+    </div>
+  </div>
+
+  <!-- NEXT 覆蓋幕 -->
+  <div class="next-banner" id="nextOverlay">
+    <div class="next-text">&gt;&gt;&gt; NEXT 準備中</div>
+  </div>
+
+  <script>
+    // 頻道需與 controller.html 中的 TOPIC 一致
+    const TOPIC = "taoyuan-live-controller-x883";
+    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+    client.on('connect', () => {
+      console.log("[presentation_overlay] 已成功連線至雲端中繼站");
+      client.subscribe(TOPIC);
+    });
+
+    // 接收手機控制指令
+    client.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+
+        if (data.action === "switchSpeaker") {
+          updateSpeakerInfo(data.name, data.term, data.slogan);
+        } else if (data.action === "toggleNext") {
+          const overlay = document.getElementById('nextOverlay');
+          overlay.classList.toggle('active', data.show);
+        }
+      } catch (e) {
+        console.error("解析訊息錯誤", e);
+      }
+    });
+
+    // 平滑淡入淡出更換文字
+    function updateSpeakerInfo(name, term, slogan) {
+      const speakerBox = document.getElementById('speakerBox');
+      const sloganText = document.getElementById('sloganText');
+
+      speakerBox.classList.add('fade-out');
+      sloganText.classList.add('fade-out');
+
+      setTimeout(() => {
+        if (name) document.getElementById('speakerName').textContent = name;
+        if (term) document.getElementById('speakerTerm').textContent = term;
+        if (slogan) document.getElementById('sloganText').textContent = slogan;
+
+        speakerBox.classList.remove('fade-out');
+        sloganText.classList.remove('fade-out');
+      }, 300);
+    }
+
+    // 時鐘更新
+    function updateClock() {
+      const now = new Date();
+      const sec = now.getSeconds();
+      const min = now.getMinutes();
+      const hr = now.getHours();
+
+      const secDeg = (sec / 60) * 360;
+      const minDeg = ((min + sec / 60) / 60) * 360;
+      const hrDeg = (((hr % 12) + min / 60) / 12) * 360;
+
+      document.getElementById('secHand').style.transform = `rotate(${secDeg}deg)`;
+      document.getElementById('minHand').style.transform = `rotate(${minDeg}deg)`;
+      document.getElementById('hourHand').style.transform = `rotate(${hrDeg}deg)`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
+</body>
+</html>
