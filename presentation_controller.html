@@ -2,508 +2,393 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>直播控制器 (支援自訂資訊)</title>
+  <title>Presentation Overlay</title>
   <!-- 免費雲端 MQTT 通訊庫 -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
-    :root {
-      --bg: #090e17;
-      --card-bg: #121c2d;
-      --card-active: #1e3355;
-      --primary: #4df3ff;
-      --accent: #ffde59;
-      --danger: #ff4d4d;
-      --border: #2a3d66;
-      --text-muted: #8fa0be;
-    }
-
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      -webkit-tap-highlight-color: transparent;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", sans-serif;
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
     }
 
     body {
-      background-color: var(--bg);
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: transparent;
       color: #ffffff;
-      padding: 14px;
-      padding-bottom: 90px;
+      position: relative;
     }
 
-    /* 頂部狀態列 */
-    .status-bar {
+    /* 頂部主題橫幅 */
+    .top-banner {
+      position: absolute;
+      top: 24px;
+      left: 100px;
+      right: 580px;
+      height: 70px;
+      border: 2px solid #5b7fff;
+      border-radius: 8px;
+      background: rgba(10, 20, 50, 0.88);
+      box-shadow: 0 0 15px rgba(0, 150, 255, 0.4);
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      background: var(--card-bg);
-      padding: 10px 14px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      margin-bottom: 12px;
-      font-size: 13px;
+      padding: 0 25px;
+      gap: 20px;
     }
 
-    .status-indicator {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #888;
-      margin-right: 6px;
-    }
-    .status-indicator.online { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
-
-    /* 分頁標籤切換 */
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
+    .arrows {
+      color: #4df3ff;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -2px;
     }
 
-    .tab-btn {
-      flex: 1;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--card-bg);
-      color: var(--text-muted);
-      font-size: 14px;
+    .main-title {
+      font-size: 30px;
       font-weight: bold;
-      cursor: pointer;
+      letter-spacing: 2px;
+      transition: opacity 0.3s ease;
     }
 
-    .tab-btn.active {
-      background: var(--primary);
-      color: #000;
-      border-color: var(--primary);
+    /* 左側簡報區（鏤空留給 OBS PPT 視窗） */
+    .main-frame {
+      position: absolute;
+      top: 110px;
+      left: 100px;
+      width: 1240px;
+      height: 820px;
+      border: 3px solid #3c65d6;
+      box-shadow: inset 0 0 20px rgba(60, 101, 214, 0.3);
+      background: transparent;
     }
 
-    /* 快捷功能列 */
-    .quick-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    .action-btn {
-      padding: 11px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: bold;
-      border: 1px solid var(--border);
-      background: var(--card-bg);
-      color: #fff;
+    /* 底部標語條 */
+    .bottom-bar {
+      position: absolute;
+      bottom: 40px;
+      left: 100px;
+      width: 1240px;
+      height: 50px;
+      border: 2px solid #3c65d6;
+      border-radius: 6px;
+      background: rgba(10, 20, 50, 0.9);
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
-    }
-    .action-btn:active { opacity: 0.7; }
-    .action-btn.active-warn { background: #664400; border-color: var(--accent); color: var(--accent); }
-
-    /* 表單區塊 */
-    .custom-box {
-      background: var(--card-bg);
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
-      margin-bottom: 16px;
+      font-size: 22px;
+      letter-spacing: 4px;
+      color: #d1e4ff;
+      transition: opacity 0.3s ease;
     }
 
-    .form-group {
-      margin-bottom: 12px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 13px;
-      color: var(--primary);
-      margin-bottom: 5px;
-      font-weight: bold;
-    }
-
-    .form-group input, .form-group textarea {
-      width: 100%;
-      padding: 10px;
-      background: #060a12;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: #fff;
-      font-size: 15px;
-      outline: none;
-    }
-
-    .form-group input:focus, .form-group textarea:focus {
-      border-color: var(--primary);
-    }
-
-    .form-btns {
-      display: flex;
-      gap: 10px;
-      margin-top: 14px;
-    }
-
-    .btn-submit {
-      flex: 1.2;
-      background: var(--accent);
-      color: #000;
-      font-weight: bold;
-      border: none;
-      padding: 12px;
-      border-radius: 6px;
-      font-size: 15px;
-      cursor: pointer;
-    }
-
-    .btn-save {
-      flex: 1;
-      background: #1e3355;
-      color: #fff;
-      border: 1px solid var(--primary);
-      padding: 12px;
-      border-radius: 6px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    /* 名單卡片列表 */
-    .speaker-list {
+    /* 右側資訊與視訊框 */
+    .right-panel {
+      position: absolute;
+      top: 24px;
+      right: 80px;
+      width: 440px;
+      height: 980px;
+      border: 2px solid #5b7fff;
+      border-radius: 12px;
+      background: rgba(12, 18, 42, 0.75);
+      box-shadow: 0 0 20px rgba(0, 150, 255, 0.3);
       display: flex;
       flex-direction: column;
-      gap: 10px;
-    }
-
-    .speaker-card {
-      position: relative;
-      background: var(--card-bg);
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      padding: 13px;
-      transition: all 0.2s ease;
-    }
-
-    .speaker-card.active {
-      border-color: var(--accent);
-      background: var(--card-active);
-      box-shadow: 0 0 10px rgba(255, 222, 89, 0.25);
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
       align-items: center;
+      padding: 20px;
+    }
+
+    .location-tag {
+      font-size: 18px;
+      color: #d0dcff;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+
+    /* 時鐘容器 */
+    .clock-container {
+      width: 120px;
+      height: 120px;
+      border: 3px solid #6c8cff;
+      border-radius: 50%;
+      position: relative;
+      margin-bottom: 25px;
+      box-shadow: 0 0 10px rgba(108, 140, 255, 0.5);
+    }
+
+    .hand {
+      position: absolute;
+      bottom: 50%;
+      left: 50%;
+      transform-origin: bottom center;
+      background: #ffffff;
+      border-radius: 2px;
+    }
+    .hour-hand { width: 4px; height: 32px; margin-left: -2px; }
+    .min-hand  { width: 3px; height: 45px; margin-left: -1.5px; }
+    .sec-hand  { width: 1.5px; height: 50px; margin-left: -0.75px; background: #4df3ff; }
+
+    /* 講者視訊畫面鏤空區 */
+    .camera-cutout {
+      width: 380px;
+      height: 600px;
+      border: 2px solid #8ba4f8;
+      border-radius: 10px;
+      background: transparent;
+    }
+
+    /* 講者姓名標牌 */
+    .speaker-info {
+      margin-top: 25px;
+      text-align: center;
+      transition: opacity 0.3s ease;
+    }
+
+    .speaker-term {
+      font-size: 24px;
+      letter-spacing: 1px;
+      color: #c0d4ff;
       margin-bottom: 6px;
     }
 
     .speaker-name {
-      font-size: 19px;
-      font-weight: bold;
-      color: #ffffff;
-    }
-    .speaker-card.active .speaker-name {
-      color: var(--accent);
-    }
-
-    .speaker-tag {
-      font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.1);
-      color: #cbd5e1;
+      font-size: 42px;
+      font-weight: 900;
+      color: #ffde59;
+      letter-spacing: 6px;
+      text-shadow: 0 0 12px rgba(255, 222, 89, 0.6);
     }
 
-    .speaker-slogan {
-      font-size: 13px;
-      color: #94a3b8;
-      line-height: 1.4;
-      margin-bottom: 6px;
+    .fade-out {
+      opacity: 0;
     }
 
-    .card-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-      border-top: 1px solid rgba(255,255,255,0.06);
-      padding-top: 6px;
-    }
-
-    .btn-icon {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      font-size: 12px;
-      cursor: pointer;
-    }
-
-    /* 底部固定狀態條 */
-    .current-display {
+    /* =========================================
+       NEXT 轉場全畫面遮罩（100% 完全不透明）
+       ========================================= */
+    .next-banner {
       position: fixed;
-      bottom: 0;
+      top: 0;
       left: 0;
-      right: 0;
-      background: rgba(9, 14, 23, 0.96);
-      backdrop-filter: blur(8px);
-      border-top: 1px solid var(--border);
-      padding: 12px 16px;
-      font-size: 13px;
-      display: flex;
+      width: 1920px;
+      height: 1080px;
+      background: radial-gradient(circle at center, #0f245a 0%, #071026 65%, #03060f 100%);
+      display: none;
+      flex-direction: column;
       justify-content: space-between;
       align-items: center;
-      z-index: 100;
+      padding: 30px 100px;
+      z-index: 999999;
     }
-    .current-name {
-      color: var(--accent);
-      font-weight: bold;
-      font-size: 16px;
+
+    .next-banner.active {
+      display: flex;
+    }
+
+    .next-top-bar {
+      width: 100%;
+      height: 70px;
+      border: 2px solid #5b7fff;
+      border-radius: 8px;
+      background: #0b1536;
+      box-shadow: 0 0 20px rgba(0, 150, 255, 0.4);
+      display: flex;
+      align-items: center;
+      padding: 0 30px;
+      gap: 15px;
+    }
+
+    .next-arrows {
+      color: #4df3ff;
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: -2px;
+    }
+
+    .next-header-title {
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #ffffff;
+    }
+
+    .next-center-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      margin-top: -20px;
+    }
+
+    .next-term-text {
+      font-size: 38px;
+      color: #cbd5e1;
+      letter-spacing: 6px;
+      margin-bottom: 18px;
+    }
+
+    .next-name-text {
+      font-size: 88px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: 16px;
+      text-shadow: 0 0 30px rgba(77, 243, 255, 0.7);
+    }
+
+    .next-bottom-bar {
+      width: 100%;
+      height: 56px;
+      border: 2px solid #5b7fff;
+      border-radius: 8px;
+      background: #0b1536;
+      box-shadow: 0 0 20px rgba(0, 150, 255, 0.4);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .next-bottom-bar::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: radial-gradient(rgba(77, 243, 255, 0.3) 1px, transparent 1px);
+      background-size: 12px 12px;
     }
   </style>
 </head>
 <body>
 
-  <!-- 連線狀態 -->
-  <div class="status-bar">
-    <div>
-      <span class="status-indicator" id="statusDot"></span>
-      <span id="statusText">MQTT 連線中...</span>
+  <!-- 頂部標題列 -->
+  <div class="top-banner">
+    <div class="arrows">&gt;&gt;&gt;</div>
+    <div class="main-title" id="mainTitle">115學年度國民中學候用校長辦學理念公開說明會</div>
+  </div>
+
+  <!-- 左側簡報鏤空區 -->
+  <div class="main-frame"></div>
+
+  <!-- 底部理念標語 -->
+  <div class="bottom-bar" id="sloganText">教育善好 顧好下一代</div>
+
+  <!-- 右側資訊與視訊框 -->
+  <div class="right-panel">
+    <div class="location-tag">【說明會現場 ｜ 桃園國中演藝廳】</div>
+    
+    <div class="clock-container">
+      <div class="hand hour-hand" id="hourHand"></div>
+      <div class="hand min-hand" id="minHand"></div>
+      <div class="hand sec-hand" id="secHand"></div>
     </div>
-    <div style="color: var(--text-muted);">頻道: <span style="color: var(--primary);">2026-LIVE</span></div>
-  </div>
 
-  <!-- 快捷功能列 -->
-  <div class="quick-actions">
-    <button class="action-btn" id="nextBtn" onclick="toggleNextOverlay()">
-      ⏭ 轉場下一位
-    </button>
-    <button class="action-btn" onclick="resendCurrent()">
-      🔄 重整發送當前
-    </button>
-  </div>
+    <div class="camera-cutout"></div>
 
-  <!-- 分頁選單 -->
-  <div class="tabs">
-    <button class="tab-btn active" id="tabListBtn" onclick="switchTab('list')">候選人名單切換</button>
-    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">自訂資訊即時推送</button>
-  </div>
-
-  <!-- 分頁 1: 自訂資訊即時輸入 -->
-  <div id="viewCustom" style="display: none;">
-    <div class="custom-box">
-      <div class="form-group">
-        <label>校長姓名</label>
-        <input type="text" id="inputName" placeholder="例如：林書銘">
-      </div>
-      <div class="form-group">
-        <label>期別 / 身分標牌</label>
-        <input type="text" id="inputTerm" placeholder="例如：第28期候用校長">
-      </div>
-      <div class="form-group">
-        <label>底部側標 / 辦學理念標語</label>
-        <textarea id="inputSlogan" rows="2" placeholder="例如：以愛為核心、共創智慧新校園"></textarea>
-      </div>
-
-      <div class="form-btns">
-        <button class="btn-submit" onclick="sendCustomData()">⚡ 立即更新 OBS 畫面</button>
-        <button class="btn-save" onclick="saveToCards()">💾 存入名單卡片</button>
-      </div>
+    <div class="speaker-info" id="speakerBox">
+      <div class="speaker-term" id="speakerTerm">第28期候用校長</div>
+      <div class="speaker-name" id="speakerName">陳秋貝</div>
     </div>
   </div>
 
-  <!-- 分頁 2: 快速點選名單 -->
-  <div id="viewList">
-    <div class="speaker-list" id="cardContainer"></div>
-  </div>
+  <!-- 完全不透明的 NEXT 轉場幕 -->
+  <div class="next-banner" id="nextOverlay">
+    <div class="next-top-bar">
+      <div class="next-arrows">&gt;&gt;&gt;</div>
+      <div class="next-header-title">NEXT</div>
+    </div>
 
-  <!-- 底部即時顯示列 -->
-  <div class="current-display">
-    <div>當前 OBS 顯示：<span class="current-name" id="currentLabel">尚未發送</span></div>
-    <button onclick="clearDisplay()" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border); background: #1a263d; color: #cbd5e1; font-size: 12px;">清空</button>
+    <div class="next-center-content">
+      <div class="next-term-text" id="nextTerm">第28期候用校長</div>
+      <div class="next-name-text" id="nextName">陳秋貝</div>
+    </div>
+
+    <div class="next-bottom-bar"></div>
   </div>
 
   <script>
-    // 預設名單
-    const DEFAULT_SPEAKERS = [
-      { name: "陳秋貝", term: "第28期候用校長", slogan: "以溫度引領、以專業實踐，成就師生與學校共好願景" },
-      { name: "王大同", term: "第28期候用校長", slogan: "科技賦能創新，厚植學生跨域核心素養" },
-      { name: "李小美", term: "第28期候用校長", slogan: "適性揚才無極限，讓每位孩子找到發光的舞台" },
-      { name: "張文華", term: "第28期候用校長", slogan: "友善溫馨活力校園，深化品格共創卓越未來" },
-      { name: "趙志強", term: "第28期候用校長", slogan: "深化雙語跨國鏈結，拓展新世代世界競爭力" },
-      { name: "林玉玲", term: "第28期候用校長", slogan: "深耕閱讀與多元美感，培育終身自主學習力" }
-    ];
-
-    // 本地持久化資料讀取
-    let speakers = JSON.parse(localStorage.getItem('stream_speakers')) || DEFAULT_SPEAKERS;
-
-    // 通訊主題設定（需與 presentation_overlay.html 保持一致）
     const TOPIC = "taoyuan-live-controller-x883";
     const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
-    let currentSpeaker = null;
-    let isNextMode = false;
+    // 暫存即將接棒的下一位候選人資料
+    let pendingNextData = null;
 
-    // MQTT 連線事件
     client.on('connect', () => {
-      document.getElementById('statusDot').classList.add('online');
-      const text = document.getElementById('statusText');
-      text.innerText = "已連線 (可隨時點按操作)";
-      text.style.color = "#00ff88";
+      console.log("[presentation_overlay] 已成功連線至雲端中繼站");
+      client.subscribe(TOPIC);
     });
 
-    client.on('offline', () => {
-      document.getElementById('statusDot').classList.remove('online');
-      const text = document.getElementById('statusText');
-      text.innerText = "離線中，重新連線...";
-      text.style.color = "#ff4d4d";
+    client.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+
+        // 1. 手動點選名單或直接切換
+        if (data.action === "switchSpeaker") {
+          updateSpeakerInfo(data.name, data.term, data.slogan);
+          if (data.hideNext) {
+            document.getElementById('nextOverlay').classList.remove('active');
+          }
+        } 
+        // 2. 點擊「轉場下一位」：彈出全黑科技幕，文字顯示順序「下一位」
+        else if (data.action === "showNextTransition") {
+          pendingNextData = {
+            name: data.nextName,
+            term: data.nextTerm,
+            slogan: data.nextSlogan
+          };
+          // 更新轉場幕中央文字
+          document.getElementById('nextName').textContent = data.nextName;
+          document.getElementById('nextTerm').textContent = data.nextTerm;
+          
+          // 開啟完全不透明遮罩
+          document.getElementById('nextOverlay').classList.add('active');
+        } 
+        // 3. 結束轉場：關閉遮罩，將剛才預告的下一位正式套用到主畫面
+        else if (data.action === "endNextTransition") {
+          document.getElementById('nextOverlay').classList.remove('active');
+          if (pendingNextData) {
+            updateSpeakerInfo(pendingNextData.name, pendingNextData.term, pendingNextData.slogan);
+            pendingNextData = null;
+          }
+        }
+      } catch (e) {
+        console.error("解析訊息錯誤", e);
+      }
     });
 
-    // 渲染名單卡片
-    function renderCards() {
-      const container = document.getElementById('cardContainer');
-      container.innerHTML = "";
+    function updateSpeakerInfo(name, term, slogan) {
+      const speakerBox = document.getElementById('speakerBox');
+      const sloganText = document.getElementById('sloganText');
 
-      speakers.forEach((item, index) => {
-        const card = document.createElement('div');
-        const isActive = currentSpeaker && currentSpeaker.name === item.name;
-        card.className = `speaker-card ${isActive ? 'active' : ''}`;
-        card.id = `card-${index}`;
+      speakerBox.classList.add('fade-out');
+      sloganText.classList.add('fade-out');
 
-        card.innerHTML = `
-          <div class="card-header">
-            <span class="speaker-name">${index + 1}. ${item.name}</span>
-            <span class="speaker-tag">${item.term}</span>
-          </div>
-          <div class="speaker-slogan">${item.slogan}</div>
-          <div class="card-actions">
-            <button class="btn-icon" onclick="editCard(event, ${index})">✏️ 載入編輯</button>
-            <button class="btn-icon" style="color:var(--danger);" onclick="deleteCard(event, ${index})">🗑️ 刪除</button>
-          </div>
-        `;
+      setTimeout(() => {
+        if (name) document.getElementById('speakerName').textContent = name;
+        if (term) document.getElementById('speakerTerm').textContent = term;
+        if (slogan) document.getElementById('sloganText').textContent = slogan;
 
-        // 點擊卡片直接更換 OBS
-        card.onclick = (e) => {
-          if (e.target.tagName.toLowerCase() === 'button') return;
-          pushToOBS(item);
-        };
-
-        container.appendChild(card);
-      });
-
-      // 同步儲存至手機 localStorage
-      localStorage.setItem('stream_speakers', JSON.stringify(speakers));
+        speakerBox.classList.remove('fade-out');
+        sloganText.classList.remove('fade-out');
+      }, 300);
     }
 
-    // 發送資料給 OBS
-    function pushToOBS(data) {
-      currentSpeaker = data;
-      document.getElementById('currentLabel').innerText = data.name;
+    function updateClock() {
+      const now = new Date();
+      const sec = now.getSeconds();
+      const min = now.getMinutes();
+      const hr = now.getHours();
 
-      if (navigator.vibrate) navigator.vibrate(40);
+      const secDeg = (sec / 60) * 360;
+      const minDeg = ((min + sec / 60) / 60) * 360;
+      const hrDeg = (((hr % 12) + min / 60) / 12) * 360;
 
-      // 發布 MQTT 廣播
-      client.publish(TOPIC, JSON.stringify({
-        action: "switchSpeaker",
-        name: data.name,
-        term: data.term,
-        slogan: data.slogan
-      }));
-
-      renderCards();
+      document.getElementById('secHand').style.transform = `rotate(${secDeg}deg)`;
+      document.getElementById('minHand').style.transform = `rotate(${minDeg}deg)`;
+      document.getElementById('hourHand').style.transform = `rotate(${hrDeg}deg)`;
     }
-
-    // 自訂輸入並立即送出
-    function sendCustomData() {
-      const name = document.getElementById('inputName').value.trim();
-      const term = document.getElementById('inputTerm').value.trim() || "候用校長";
-      const slogan = document.getElementById('inputSlogan').value.trim() || "";
-
-      if (!name) {
-        alert("請至少輸入校長姓名！");
-        return;
-      }
-
-      pushToOBS({ name, term, slogan });
-    }
-
-    // 存入名單卡片
-    function saveToCards() {
-      const name = document.getElementById('inputName').value.trim();
-      const term = document.getElementById('inputTerm').value.trim() || "候用校長";
-      const slogan = document.getElementById('inputSlogan').value.trim() || "";
-
-      if (!name) {
-        alert("請輸入校長姓名再儲存！");
-        return;
-      }
-
-      speakers.push({ name, term, slogan });
-      renderCards();
-      switchTab('list');
-      alert(`已成功將「${name}」加入名單！`);
-    }
-
-    // 載入至編輯框
-    function editCard(e, index) {
-      e.stopPropagation();
-      const item = speakers[index];
-      document.getElementById('inputName').value = item.name;
-      document.getElementById('inputTerm').value = item.term;
-      document.getElementById('inputSlogan').value = item.slogan;
-      switchTab('custom');
-    }
-
-    // 刪除卡片
-    function deleteCard(e, index) {
-      e.stopPropagation();
-      if (confirm(`確定要刪除「${speakers[index].name}」嗎？`)) {
-        speakers.splice(index, 1);
-        renderCards();
-      }
-    }
-
-    // 重發當前
-    function resendCurrent() {
-      if (currentSpeaker) pushToOBS(currentSpeaker);
-    }
-
-    // 清空 OBS 顯示
-    function clearDisplay() {
-      client.publish(TOPIC, JSON.stringify({
-        action: "switchSpeaker",
-        name: "",
-        term: "",
-        slogan: ""
-      }));
-      document.getElementById('currentLabel').innerText = "(已清空)";
-      currentSpeaker = null;
-      renderCards();
-    }
-
-    // NEXT 轉場按鈕
-    function toggleNextOverlay() {
-      isNextMode = !isNextMode;
-      const btn = document.getElementById('nextBtn');
-      btn.classList.toggle('active-warn', isNextMode);
-
-      client.publish(TOPIC, JSON.stringify({
-        action: "toggleNext",
-        show: isNextMode
-      }));
-    }
-
-    // 分頁切換
-    function switchTab(tab) {
-      const isList = tab === 'list';
-      document.getElementById('viewList').style.display = isList ? 'block' : 'none';
-      document.getElementById('viewCustom').style.display = isList ? 'none' : 'block';
-      document.getElementById('tabListBtn').classList.toggle('active', isList);
-      document.getElementById('tabCustomBtn').classList.toggle('active', !isList);
-    }
-
-    // 初始化
-    renderCards();
+    setInterval(updateClock, 1000);
+    updateClock();
   </script>
 </body>
 </html>
