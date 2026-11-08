@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>直播控制器 (支援名單擴充與批量匯入)</title>
+  <title>直播控制器 (支援活動標題與地點自訂)</title>
   <!-- 免費雲端 MQTT 通訊庫 -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
@@ -120,6 +120,15 @@
       margin-bottom: 16px;
     }
 
+    .box-header-title {
+      font-size: 15px;
+      font-weight: bold;
+      color: var(--primary);
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 6px;
+    }
+
     .form-group {
       margin-bottom: 12px;
     }
@@ -127,7 +136,7 @@
     .form-group label {
       display: block;
       font-size: 13px;
-      color: var(--primary);
+      color: var(--text-muted);
       margin-bottom: 5px;
       font-weight: bold;
     }
@@ -283,7 +292,7 @@
       <span class="status-indicator" id="statusDot"></span>
       <span id="statusText">MQTT 連線中...</span>
     </div>
-    <div style="color: var(--text-muted);">總人數: <span id="countLabel" style="color: var(--primary); font-weight:bold;">0</span></div>
+    <div style="color: var(--text-muted);">人數: <span id="countLabel" style="color: var(--primary); font-weight:bold;">0</span></div>
   </div>
 
   <!-- 快捷功能列 -->
@@ -301,7 +310,7 @@
   <!-- 分頁選單 -->
   <div class="tabs">
     <button class="tab-btn active" id="tabListBtn" onclick="switchTab('list')">名單點選切換</button>
-    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">單筆自訂/新增</button>
+    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">自訂資訊/活動設定</button>
     <button class="tab-btn" id="tabBatchBtn" onclick="switchTab('batch')">批量匯入名單</button>
   </div>
 
@@ -310,9 +319,27 @@
     <div class="speaker-list" id="cardContainer"></div>
   </div>
 
-  <!-- 分頁 2: 單筆自訂 / 新增 -->
+  <!-- 分頁 2: 單筆自訂 / 活動資訊設定 -->
   <div id="viewCustom" style="display: none;">
+    <!-- 活動全域設定區塊 -->
     <div class="custom-box">
+      <div class="box-header-title">📌 說明會整體設定 (頂部標題與地點)</div>
+      <div class="form-group">
+        <label>頂部主標題文字</label>
+        <input type="text" id="inputMainTitle" placeholder="例如：115學年度國民中學候用校長辦學理念公開說明會">
+      </div>
+      <div class="form-group">
+        <label>右上角現場地點文字</label>
+        <input type="text" id="inputVenue" placeholder="例如：【說明會現場 ｜ 桃園國中演藝廳】">
+      </div>
+      <div class="form-btns">
+        <button class="btn-submit" onclick="sendEventConfig()">⚡ 更新說明會標題與地點</button>
+      </div>
+    </div>
+
+    <!-- 候選人自訂區塊 -->
+    <div class="custom-box">
+      <div class="box-header-title">👤 候選人資訊設定</div>
       <div class="form-group">
         <label>候選人姓名</label>
         <input type="text" id="inputName" placeholder="例如：林書銘">
@@ -327,7 +354,7 @@
       </div>
 
       <div class="form-btns">
-        <button class="btn-submit" onclick="sendCustomData()">⚡ 立即更新 OBS 畫面</button>
+        <button class="btn-submit" onclick="sendCustomData()">⚡ 立即更新講者資訊</button>
         <button class="btn-save" onclick="saveToCards()">💾 新增加入名單</button>
       </div>
     </div>
@@ -362,7 +389,6 @@
   </div>
 
   <script>
-    // 預設 10 位候用校長名單
     const DEFAULT_SPEAKERS = [
       { name: "陳秋貝", term: "第28期候用校長", slogan: "以溫度引領、以專業實踐，成就師生與學校共好願景" },
       { name: "王大同", term: "第28期候用校長", slogan: "科技賦能創新，厚植學生跨域核心素養" },
@@ -378,11 +404,19 @@
 
     let speakers = JSON.parse(localStorage.getItem('stream_speakers')) || DEFAULT_SPEAKERS;
 
+    // 讀取儲存的標題與地點
+    let currentMainTitle = localStorage.getItem('stream_main_title') || "115學年度國民中學候用校長辦學理念公開說明會";
+    let currentVenue = localStorage.getItem('stream_venue') || "【說明會現場 ｜ 桃園國中演藝廳】";
+
     const TOPIC = "taoyuan-live-controller-x883";
     const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
     let currentIndex = -1;
     let isNextMode = false;
+
+    // 初始化填入標題與地點
+    document.getElementById('inputMainTitle').value = currentMainTitle;
+    document.getElementById('inputVenue').value = currentVenue;
 
     client.on('connect', () => {
       document.getElementById('statusDot').classList.add('online');
@@ -397,6 +431,31 @@
       text.innerText = "重新連線中...";
       text.style.color = "#ff4d4d";
     });
+
+    // 發送全域標題與地點更新
+    function sendEventConfig() {
+      const title = document.getElementById('inputMainTitle').value.trim();
+      const venue = document.getElementById('inputVenue').value.trim();
+
+      if (!title && !venue) {
+        alert("請輸入標題或地點！");
+        return;
+      }
+
+      currentMainTitle = title;
+      currentVenue = venue;
+      localStorage.setItem('stream_main_title', currentMainTitle);
+      localStorage.setItem('stream_venue', currentVenue);
+
+      client.publish(TOPIC, JSON.stringify({
+        action: "updateConfig",
+        title: currentMainTitle,
+        venue: currentVenue
+      }));
+
+      if (navigator.vibrate) navigator.vibrate(40);
+      alert("✅ 說明會標題與地點已同步更新至 OBS！");
+    }
 
     function renderCards() {
       const container = document.getElementById('cardContainer');
@@ -438,7 +497,6 @@
       localStorage.setItem('stream_speakers', JSON.stringify(speakers));
     }
 
-    // 調整卡片先後順序
     function moveOrder(e, index, direction) {
       e.stopPropagation();
       const targetIndex = index + direction;
@@ -573,7 +631,6 @@
       alert(`已將「${name}」加入名單第 ${speakers.length} 位！`);
     }
 
-    // 批量匯入邏輯
     function importBatch(isOverwrite) {
       const text = document.getElementById('batchInput').value.trim();
       if (!text) {
@@ -646,9 +703,16 @@
     }
 
     function resendCurrent() {
+      // 重新發布當前講者資訊
       if (currentIndex >= 0 && currentIndex < speakers.length) {
         selectSpeaker(currentIndex);
       }
+      // 重新發布活動標題與地點
+      client.publish(TOPIC, JSON.stringify({
+        action: "updateConfig",
+        title: currentMainTitle,
+        venue: currentVenue
+      }));
     }
 
     function clearDisplay() {
