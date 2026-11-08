@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>直播控制器 (支援全欄位自訂)</title>
+  <title>直播控制器 (支援規則說明頁與全自訂)</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     :root {
@@ -56,18 +56,18 @@
 
     .tabs {
       display: flex;
-      gap: 6px;
+      gap: 5px;
       margin-bottom: 14px;
     }
 
     .tab-btn {
       flex: 1;
-      padding: 9px 4px;
+      padding: 9px 2px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--card-bg);
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: bold;
       cursor: pointer;
     }
@@ -80,7 +80,7 @@
 
     .quick-actions {
       display: grid;
-      grid-template-columns: 1.5fr 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 10px;
       margin-bottom: 14px;
     }
@@ -102,6 +102,7 @@
     }
     .action-btn:active { opacity: 0.7; }
     .action-btn.active-warn { background: #7a4300; border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px rgba(255, 222, 89, 0.4); }
+    .action-btn.active-blue { background: #004b75; border-color: var(--primary); color: var(--primary); box-shadow: 0 0 10px rgba(77, 243, 255, 0.4); }
 
     .btn-sub {
       font-size: 11px;
@@ -299,17 +300,18 @@
       <span id="nextBtnTitle">⏭ 轉場下一位</span>
       <span class="btn-sub" id="nextBtnSub">預告下一順位</span>
     </button>
-    <button class="action-btn" onclick="resendCurrent()">
-      <span>🔄 重整發送</span>
-      <span class="btn-sub">同步當前資訊</span>
+    <button class="action-btn" id="rulesBtn" onclick="toggleRulesScreen()">
+      <span id="rulesBtnTitle">📋 開啟規則頁</span>
+      <span class="btn-sub" id="rulesBtnSub">暖場/說明幕</span>
     </button>
   </div>
 
   <!-- 分頁選單 -->
   <div class="tabs">
-    <button class="tab-btn active" id="tabListBtn" onclick="switchTab('list')">名單點選切換</button>
-    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">自訂資訊/活動設定</button>
-    <button class="tab-btn" id="tabBatchBtn" onclick="switchTab('batch')">批量匯入名單</button>
+    <button class="tab-btn active" id="tabListBtn" onclick="switchTab('list')">名單切換</button>
+    <button class="tab-btn" id="tabRulesBtn" onclick="switchTab('rules')">規則頁設定</button>
+    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">活動/講者設定</button>
+    <button class="tab-btn" id="tabBatchBtn" onclick="switchTab('batch')">批量匯入</button>
   </div>
 
   <!-- 分頁 1: 名單點選切換 -->
@@ -317,9 +319,34 @@
     <div class="speaker-list" id="cardContainer"></div>
   </div>
 
-  <!-- 分頁 2: 單筆自訂 / 活動資訊設定 -->
+  <!-- 分頁 2: 規則說明頁自訂設定 -->
+  <div id="viewRules" style="display: none;">
+    <div class="custom-box">
+      <div class="box-header-title">📋 規則說明頁 (大字卡) 設定</div>
+      <div class="form-group">
+        <label>上方大標題</label>
+        <input type="text" id="ruleTitle" placeholder="例如：規則說明" value="規則說明">
+      </div>
+      <div class="form-group">
+        <label>備註提示內容 (每行一條，支援換行)</label>
+        <textarea id="ruleContent" rows="6" placeholder=">候用校長報告使用時間為每位10分鐘..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>底部左側黃色方塊文字</label>
+        <input type="text" id="ruleBottomTag" placeholder="例如：說明會，即將開始" value="說明會，即將開始">
+      </div>
+      <div class="form-group">
+        <label>底部右側藍底橫幅文字</label>
+        <input type="text" id="ruleBottomTitle" placeholder="例如：115學年度國民中學候用校長辦學理念公開說明會">
+      </div>
+      <div class="form-btns">
+        <button class="btn-submit" onclick="saveAndSendRules()">⚡ 儲存並更新規則頁內容</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分頁 3: 單筆自訂 / 活動資訊設定 -->
   <div id="viewCustom" style="display: none;">
-    <!-- 活動全域設定區塊 -->
     <div class="custom-box">
       <div class="box-header-title">📌 說明會整體設定</div>
       <div class="form-group">
@@ -339,7 +366,6 @@
       </div>
     </div>
 
-    <!-- 候選人自訂區塊 -->
     <div class="custom-box">
       <div class="box-header-title">👤 候選人資訊設定</div>
       <div class="form-group">
@@ -354,7 +380,6 @@
         <label>底部理念標語</label>
         <textarea id="inputSlogan" rows="2" placeholder="例如：以愛為核心、共創智慧新校園"></textarea>
       </div>
-
       <div class="form-btns">
         <button class="btn-submit" onclick="sendCustomData()">⚡ 立即更新講者資訊</button>
         <button class="btn-save" onclick="saveToCards()">💾 新增加入名單</button>
@@ -362,7 +387,7 @@
     </div>
   </div>
 
-  <!-- 分頁 3: 批量文字匯入 -->
+  <!-- 分頁 4: 批量文字匯入 -->
   <div id="viewBatch" style="display: none;">
     <div class="custom-box">
       <div class="form-group">
@@ -401,6 +426,11 @@
       { name: "劉慧珍", term: "第28期候用校長", slogan: "穩健行政溫暖溝通，攜手營造幸福智慧校園" }
     ];
 
+    const DEFAULT_RULES = `>候用校長報告使用時間為每位10分鐘，並依鈴聲為準，時間結束前1分鐘按1次鈴，結束時間到按2次鈴，即需結束報告。
+>請候用校長依程序表所排定之報到時間辦理報到，現場得視實際狀況彈性調整。
+>現場不提供提問或詢答，並全程直播及錄影。
+>候用校長本人或他人不得於會場內外發放資料(含多媒體簡報)。`;
+
     let speakers = JSON.parse(localStorage.getItem('stream_speakers')) || DEFAULT_SPEAKERS;
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -413,14 +443,27 @@
     let currentVenue = localStorage.getItem('stream_venue') || "【說明會現場 ｜ 桃園國中演藝廳】";
     let currentSubTitle = localStorage.getItem('stream_sub_title') || "候用校長甄選發表會";
 
+    // 規則頁設定變數
+    let ruleTitleVal = localStorage.getItem('stream_rule_title') || "規則說明";
+    let ruleContentVal = localStorage.getItem('stream_rule_content') || DEFAULT_RULES;
+    let ruleBottomTagVal = localStorage.getItem('stream_rule_tag') || "說明會，即將開始";
+    let ruleBottomTitleVal = localStorage.getItem('stream_rule_btitle') || currentMainTitle;
+
     const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
     let currentIndex = -1;
     let isNextMode = false;
+    let isRulesMode = false; // 是否正在顯示規則頁
 
+    // 初始化表單
     document.getElementById('inputMainTitle').value = currentMainTitle;
     document.getElementById('inputVenue').value = currentVenue;
     document.getElementById('inputSubTitle').value = currentSubTitle;
+
+    document.getElementById('ruleTitle').value = ruleTitleVal;
+    document.getElementById('ruleContent').value = ruleContentVal;
+    document.getElementById('ruleBottomTag').value = ruleBottomTagVal;
+    document.getElementById('ruleBottomTitle').value = ruleBottomTitleVal;
 
     client.on('connect', () => {
       document.getElementById('statusDot').classList.add('online');
@@ -435,6 +478,53 @@
       text.innerText = "重新連線中...";
       text.style.color = "#ff4d4d";
     });
+
+    // 規則頁開關控制
+    function toggleRulesScreen() {
+      isRulesMode = !isRulesMode;
+      const btn = document.getElementById('rulesBtn');
+      const title = document.getElementById('rulesBtnTitle');
+      const sub = document.getElementById('rulesBtnSub');
+
+      if (isRulesMode) {
+        btn.classList.add('active-blue');
+        title.innerText = "✖ 關閉規則頁";
+        sub.innerText = "切回發表會現場";
+      } else {
+        btn.classList.remove('active-blue');
+        title.innerText = "📋 開啟規則頁";
+        sub.innerText = "暖場/說明幕";
+      }
+
+      client.publish(TOPIC, JSON.stringify({
+        action: "toggleRules",
+        show: isRulesMode
+      }));
+    }
+
+    // 儲存並發布自定義規則
+    function saveAndSendRules() {
+      ruleTitleVal = document.getElementById('ruleTitle').value.trim() || "規則說明";
+      ruleContentVal = document.getElementById('ruleContent').value.trim();
+      ruleBottomTagVal = document.getElementById('ruleBottomTag').value.trim() || "說明會，即將開始";
+      ruleBottomTitleVal = document.getElementById('ruleBottomTitle').value.trim() || currentMainTitle;
+
+      localStorage.setItem('stream_rule_title', ruleTitleVal);
+      localStorage.setItem('stream_rule_content', ruleContentVal);
+      localStorage.setItem('stream_rule_tag', ruleBottomTagVal);
+      localStorage.setItem('stream_rule_btitle', ruleBottomTitleVal);
+
+      client.publish(TOPIC, JSON.stringify({
+        action: "updateRulesConfig",
+        title: ruleTitleVal,
+        content: ruleContentVal,
+        tag: ruleBottomTagVal,
+        bottomTitle: ruleBottomTitleVal
+      }));
+
+      if (navigator.vibrate) navigator.vibrate(40);
+      alert("✅ 規則說明頁內容已同步至 OBS！");
+    }
 
     function sendEventConfig() {
       const title = document.getElementById('inputMainTitle').value.trim();
@@ -734,10 +824,12 @@
 
     function switchTab(tab) {
       document.getElementById('viewList').style.display = tab === 'list' ? 'block' : 'none';
+      document.getElementById('viewRules').style.display = tab === 'rules' ? 'block' : 'none';
       document.getElementById('viewCustom').style.display = tab === 'custom' ? 'block' : 'none';
       document.getElementById('viewBatch').style.display = tab === 'batch' ? 'block' : 'none';
 
       document.getElementById('tabListBtn').classList.toggle('active', tab === 'list');
+      document.getElementById('tabRulesBtn').classList.toggle('active', tab === 'rules');
       document.getElementById('tabCustomBtn').classList.toggle('active', tab === 'custom');
       document.getElementById('tabBatchBtn').classList.toggle('active', tab === 'batch');
     }
