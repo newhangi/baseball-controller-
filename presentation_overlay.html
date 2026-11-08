@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Presentation Overlay - 右側欄位垂直對齊版</title>
+  <!-- 免費雲端 MQTT 通訊庫 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+    }
+
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: transparent;
+      color: #ffffff;
+      position: relative;
+    }
+
+    /* ============================================================
+       1. 底層遮罩與雙孔鏤空 (CSS clip-path)
+          - 左側簡報區：X: 50, Y: 60, W: 1180, H: 720 (底部 Y=780)
+          - 右側攝影機區：X: 1260, Y: 130, W: 610, H: 540 (移出文字，純鏡頭)
+       ============================================================ */
+    .tv-cutout-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      background: linear-gradient(180deg, #0b1528 0%, #060b17 60%, #03060d 100%);
+      pointer-events: none;
+      z-index: 1;
+
+      clip-path: polygon(
+        /* 外框全螢幕順時針 */
+        0px 0px, 1920px 0px, 1920px 1080px, 0px 1080px, 0px 0px,
+        /* 左側簡報孔洞逆時針 (50, 60) -> (1230, 780) */
+        50px 60px, 50px 780px, 1230px 780px, 1230px 60px, 50px 60px,
+        0px 0px,
+        /* 右側攝影機孔洞逆時針 (1260, 130) -> (1870, 670) */
+        1260px 130px, 1260px 670px, 1870px 670px, 1870px 130px, 1260px 130px,
+        0px 0px
+      );
+    }
+
+    /* ============================================================
+       2. 視窗框線層
+       ============================================================ */
+    .frames-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* 左側簡報外框 */
+    .frame-presentation {
+      position: absolute;
+      top: 60px;
+      left: 50px;
+      width: 1180px;
+      height: 720px;
+      border: 5px solid #dcdcdc;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    /* 右側視訊專屬外框 (純淨鏡頭，Y: 130 ~ 670) */
+    .frame-camera {
+      position: absolute;
+      top: 130px;
+      left: 1260px;
+      width: 610px;
+      height: 540px;
+      border: 5px solid #00f2fe;
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.4), inset 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    /* ============================================================
+       3. 前景新聞風格 UI 資訊層 (z-index: 10)
+       ============================================================ */
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* 左上角：活動標牌 */
+    .program-badge {
+      position: absolute;
+      top: 30px;
+      left: 60px;
+      background: linear-gradient(135deg, #0d3b66 0%, #001f3f 100%);
+      border-left: 6px solid #ffde59;
+      border-top: 2px solid #5fa8d3;
+      border-bottom: 2px solid #5fa8d3;
+      border-right: 2px solid #5fa8d3;
+      padding: 8px 24px;
+      transform: skewX(-12deg);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.7);
+    }
+
+    .program-title {
+      transform: skewX(12deg);
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #ffffff;
+      text-shadow: 1px 2px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    /* ------------------------------------------------------------
+       右側 3 個欄位：頂部對齊 Y=60px、底部對齊 Y=780px
+       ------------------------------------------------------------ */
+    /* 欄位 1：頂部「說明現場 ＋ 數字時鐘」（Y: 60px ~ 110px） */
+    .right-top-bar {
+      position: absolute;
+      top: 60px;
+      left: 1260px;
+      width: 610px;
+      height: 50px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .venue-pill {
+      flex: 1;
+      height: 100%;
+      background: rgba(15, 30, 54, 0.95);
+      border: 2px solid #4df3ff;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      font-weight: bold;
+      color: #e0f7fa;
+      letter-spacing: 1px;
+      box-shadow: 0 2px 10px rgba(0, 242, 254, 0.3);
+      transition: opacity 0.3s ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 10px;
+    }
+
+    .digital-clock-pill {
+      width: 170px;
+      height: 100%;
+      background: #001220;
+      border: 2px solid #ffde59;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Courier New", Courier, monospace, sans-serif;
+      font-size: 26px;
+      font-weight: 900;
+      color: #ffde59;
+      letter-spacing: 2px;
+      box-shadow: 0 2px 10px rgba(255, 222, 89, 0.3);
+    }
+
+    .colon-blink {
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+    /* 欄位 3：底部姓名標牌（徹底移出視訊框下，Y: 690px ~ 780px，剛好對齊簡報底部 780px） */
+    .right-bottom-speaker {
+      position: absolute;
+      top: 688px;
+      left: 1260px;
+      width: 610px;
+      height: 92px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #101e38 0%, #080f1d 100%);
+      border: 2px solid #00f2fe;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.7);
+      transition: opacity 0.3s ease;
+      padding: 6px 15px;
+    }
+
+    .speaker-term-box {
+      font-size: 19px;
+      font-weight: bold;
+      color: #b2ebf2;
+      letter-spacing: 2px;
+      margin-bottom: 2px;
+    }
+
+    .speaker-name-box {
+      font-size: 42px;
+      font-weight: 900;
+      color: #ffde59;
+      letter-spacing: 8px;
+      text-shadow: 0 0 12px rgba(255, 222, 89, 0.6);
+      line-height: 1.1;
+    }
+
+    /* ============================================================
+       4. 電視新聞底部標題組（雙層版面）
+       ============================================================ */
+    .news-bottom-container {
+      position: absolute;
+      bottom: 20px;
+      left: 50px;
+      right: 50px;
+      height: 250px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .news-headline-bar {
+      width: 100%;
+      min-height: 105px;
+      background: linear-gradient(180deg, #ffffff 0%, #f0f3f6 100%);
+      border: 3px solid #b0c4de;
+      border-top: 5px solid #d32f2f;
+      border-radius: 8px 8px 0 0;
+      display: flex;
+      align-items: center;
+      padding: 0 35px;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .headline-tag {
+      background: #d32f2f;
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 900;
+      padding: 8px 18px;
+      border-radius: 4px;
+      margin-right: 25px;
+      white-space: nowrap;
+      letter-spacing: 2px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    .headline-text {
+      font-size: 44px;
+      font-weight: 900;
+      color: #111111;
+      letter-spacing: 2px;
+      line-height: 1.2;
+      transition: opacity 0.3s ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .news-sub-bar {
+      width: 100%;
+      height: 60px;
+      background: linear-gradient(90deg, #0d3b66 0%, #001f3f 70%, #000d1a 100%);
+      border: 2px solid #1e528a;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 30px;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.7);
+    }
+
+    .sub-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 22px;
+      font-weight: bold;
+      color: #ffde59;
+      letter-spacing: 2px;
+    }
+
+    .sub-bar-right {
+      font-size: 18px;
+      font-weight: bold;
+      color: #a8d5e5;
+      letter-spacing: 2px;
+    }
+
+    .fade-out {
+      opacity: 0;
+    }
+
+    /* ============================================================
+       5. NEXT 轉場全黑幕（100% 完全不透明）
+       ============================================================ */
+    .next-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      background: radial-gradient(circle at center, #1a2d52 0%, #081226 70%, #030712 100%);
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 40px 100px;
+      z-index: 999999;
+    }
+
+    .next-banner.active {
+      display: flex;
+    }
+
+    .next-top-bar {
+      width: 100%;
+      height: 70px;
+      border: 4px solid #d32f2f;
+      border-radius: 8px;
+      background: #0f1c33;
+      box-shadow: 0 0 25px rgba(211, 47, 47, 0.5);
+      display: flex;
+      align-items: center;
+      padding: 0 30px;
+      gap: 15px;
+    }
+
+    .next-arrows {
+      color: #ffde59;
+      font-size: 32px;
+      font-weight: 900;
+    }
+
+    .next-header-title {
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #ffffff;
+    }
+
+    .next-center-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      margin-top: -20px;
+    }
+
+    .next-term-text {
+      font-size: 40px;
+      color: #ffde59;
+      letter-spacing: 6px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+
+    .next-name-text {
+      font-size: 96px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: 18px;
+      text-shadow: 0 0 35px rgba(255, 255, 255, 0.8);
+    }
+
+    .next-bottom-bar {
+      width: 100%;
+      height: 56px;
+      border: 3px solid #3c598e;
+      border-radius: 8px;
+      background: #0b1526;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. 雙孔鏤空底層遮罩 (CSS Clip-Path) -->
+  <div class="tv-cutout-bg"></div>
+
+  <!-- 2. 視窗框線層 -->
+  <div class="frames-layer">
+    <div class="frame-presentation"></div>
+    <div class="frame-camera"></div>
+  </div>
+
+  <!-- 3. 前景資訊層 -->
+  <div class="ui-layer">
+    <!-- 左上角活動標牌 -->
+    <div class="program-badge">
+      <div class="program-title" id="mainTitle">115學年度國民中學候用校長辦學理念公開說明會</div>
+    </div>
+
+    <!-- 右側欄位 1：頂部地點與時間（對齊簡報框頂部 60px） -->
+    <div class="right-top-bar">
+      <div class="venue-pill" id="venueTag">【說明會現場 ｜ 桃園國中演藝廳】</div>
+      <div class="digital-clock-pill">
+        <span id="clockHour">12</span><span class="colon-blink">:</span><span id="clockMin">00</span><span class="colon-blink">:</span><span id="clockSec">00</span>
+      </div>
+    </div>
+
+    <!-- 右側欄位 3：底部講者姓名標牌（移出視訊框，底緣對齊簡報框 780px） -->
+    <div class="right-bottom-speaker" id="speakerBox">
+      <div class="speaker-term-box" id="speakerTerm">第28期候用校長</div>
+      <div class="speaker-name-box" id="speakerName">陳秋貝</div>
+    </div>
+
+    <!-- 底部電視新聞雙層標題條 -->
+    <div class="news-bottom-container">
+      <div class="news-headline-bar">
+        <div class="headline-tag">辦學理念</div>
+        <div class="headline-text" id="sloganText">教育善好 顧好下一代，以溫度引領、專業實踐共好願景</div>
+      </div>
+
+      <div class="news-sub-bar">
+        <div class="sub-bar-left">
+          <span>● 即時現場轉播</span>
+          <span style="color:#ffffff; margin: 0 10px;">|</span>
+          <span style="color:#e0f7fa;" id="subEventTitle">候用校長甄選發表會</span>
+        </div>
+        <div class="sub-bar-right">
+          現場 LIVE 訊號
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. NEXT 轉場幕 -->
+  <div class="next-banner" id="nextOverlay">
+    <div class="next-top-bar">
+      <div class="next-arrows">&gt;&gt;&gt;</div>
+      <div class="next-header-title">NEXT 準備中</div>
+    </div>
+
+    <div class="next-center-content">
+      <div class="next-term-text" id="nextTerm">第28期候用校長</div>
+      <div class="next-name-text" id="nextName">陳秋貝</div>
+    </div>
+
+    <div class="next-bottom-bar"></div>
+  </div>
+
+  <script>
+    // 支援網址帶入 ?room=自訂頻道 (未填則回退預設)
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomID = urlParams.get('room') || "taoyuan-live-controller-x883";
+    const TOPIC = `stream-room-${roomID}`;
+
+    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+    let pendingNextData = null;
+
+    client.on('connect', () => {
+      console.log(`[presentation_overlay] 已成功連線至頻道: ${TOPIC}`);
+      client.subscribe(TOPIC);
+    });
+
+    client.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+
+        if (data.action === "switchSpeaker") {
+          updateSpeakerInfo(data.name, data.term, data.slogan);
+          if (data.hideNext) {
+            document.getElementById('nextOverlay').classList.remove('active');
+          }
+        } 
+        else if (data.action === "updateConfig") {
+          updateEventConfig(data.title, data.venue);
+        }
+        else if (data.action === "showNextTransition") {
+          pendingNextData = {
+            name: data.nextName,
+            term: data.nextTerm,
+            slogan: data.nextSlogan
+          };
+          document.getElementById('nextName').textContent = data.nextName;
+          document.getElementById('nextTerm').textContent = data.nextTerm;
+          document.getElementById('nextOverlay').classList.add('active');
+        } 
+        else if (data.action === "endNextTransition") {
+          document.getElementById('nextOverlay').classList.remove('active');
+          if (pendingNextData) {
+            updateSpeakerInfo(pendingNextData.name, pendingNextData.term, pendingNextData.slogan);
+            pendingNextData = null;
+          }
+        }
+      } catch (e) {
+        console.error("解析訊息錯誤", e);
+      }
+    });
+
+    function updateSpeakerInfo(name, term, slogan) {
+      const speakerBox = document.getElementById('speakerBox');
+      const sloganText = document.getElementById('sloganText');
+
+      speakerBox.classList.add('fade-out');
+      sloganText.classList.add('fade-out');
+
+      setTimeout(() => {
+        if (name) document.getElementById('speakerName').textContent = name;
+        if (term) document.getElementById('speakerTerm').textContent = term;
+        if (slogan) document.getElementById('sloganText').textContent = slogan;
+
+        speakerBox.classList.remove('fade-out');
+        sloganText.classList.remove('fade-out');
+      }, 300);
+    }
+
+    function updateEventConfig(title, venue) {
+      const titleEl = document.getElementById('mainTitle');
+      const subTitleEl = document.getElementById('subEventTitle');
+      const venueEl = document.getElementById('venueTag');
+
+      if (title) {
+        titleEl.classList.add('fade-out');
+        setTimeout(() => {
+          titleEl.textContent = title;
+          if (subTitleEl) subTitleEl.textContent = title;
+          titleEl.classList.remove('fade-out');
+        }, 300);
+      }
+
+      if (venue) {
+        venueEl.classList.add('fade-out');
+        setTimeout(() => {
+          venueEl.textContent = venue;
+          venueEl.classList.remove('fade-out');
+        }, 300);
+      }
+    }
+
+    function updateDigitalClock() {
+      const now = new Date();
+      const hr = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      const sec = String(now.getSeconds()).padStart(2, '0');
+
+      document.getElementById('clockHour').textContent = hr;
+      document.getElementById('clockMin').textContent = min;
+      document.getElementById('clockSec').textContent = sec;
+    }
+    setInterval(updateDigitalClock, 1000);
+    updateDigitalClock();
+  </script>
+</body>
+</html>
