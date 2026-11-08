@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>直播控制器 (支援順序下一位)</title>
+  <title>直播控制器 (支援名單擴充與批量匯入)</title>
   <!-- 免費雲端 MQTT 通訊庫 -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
@@ -30,7 +30,7 @@
       background-color: var(--bg);
       color: #ffffff;
       padding: 14px;
-      padding-bottom: 90px;
+      padding-bottom: 95px;
     }
 
     .status-bar {
@@ -57,18 +57,18 @@
 
     .tabs {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       margin-bottom: 14px;
     }
 
     .tab-btn {
       flex: 1;
-      padding: 10px;
+      padding: 9px 4px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--card-bg);
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: bold;
       cursor: pointer;
     }
@@ -139,7 +139,7 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       color: #fff;
-      font-size: 15px;
+      font-size: 14px;
       outline: none;
     }
 
@@ -161,7 +161,7 @@
       border: none;
       padding: 12px;
       border-radius: 6px;
-      font-size: 15px;
+      font-size: 14px;
       cursor: pointer;
     }
 
@@ -188,7 +188,7 @@
       background: var(--card-bg);
       border: 1.5px solid var(--border);
       border-radius: 10px;
-      padding: 13px;
+      padding: 12px;
       transition: all 0.2s ease;
     }
 
@@ -206,7 +206,7 @@
     }
 
     .speaker-name {
-      font-size: 19px;
+      font-size: 18px;
       font-weight: bold;
       color: #ffffff;
     }
@@ -215,8 +215,8 @@
     }
 
     .speaker-tag {
-      font-size: 12px;
-      padding: 2px 8px;
+      font-size: 11px;
+      padding: 2px 7px;
       border-radius: 4px;
       background: rgba(255, 255, 255, 0.1);
       color: #cbd5e1;
@@ -226,22 +226,29 @@
       font-size: 13px;
       color: #94a3b8;
       line-height: 1.4;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
 
     .card-actions {
       display: flex;
-      justify-content: flex-end;
-      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
       border-top: 1px solid rgba(255,255,255,0.06);
       padding-top: 6px;
     }
 
+    .order-btns {
+      display: flex;
+      gap: 6px;
+    }
+
     .btn-icon {
       background: transparent;
-      border: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 11px;
+      padding: 3px 8px;
       cursor: pointer;
     }
 
@@ -264,7 +271,7 @@
     .current-name {
       color: var(--accent);
       font-weight: bold;
-      font-size: 16px;
+      font-size: 15px;
     }
   </style>
 </head>
@@ -276,14 +283,14 @@
       <span class="status-indicator" id="statusDot"></span>
       <span id="statusText">MQTT 連線中...</span>
     </div>
-    <div style="color: var(--text-muted);">頻道: <span style="color: var(--primary);">2026-LIVE</span></div>
+    <div style="color: var(--text-muted);">總人數: <span id="countLabel" style="color: var(--primary); font-weight:bold;">0</span></div>
   </div>
 
   <!-- 快捷功能列 -->
   <div class="quick-actions">
     <button class="action-btn" id="nextBtn" onclick="handleNextTransition()">
       <span id="nextBtnTitle">⏭ 轉場下一位</span>
-      <span class="btn-sub" id="nextBtnSub">預告下一位</span>
+      <span class="btn-sub" id="nextBtnSub">預告下一順位</span>
     </button>
     <button class="action-btn" onclick="resendCurrent()">
       <span>🔄 重整發送</span>
@@ -291,22 +298,28 @@
     </button>
   </div>
 
-  <!-- 分頁切換 -->
+  <!-- 分頁選單 -->
   <div class="tabs">
-    <button class="tab-btn active" id="tabListBtn" onclick="switchTab('list')">候選人名單切換</button>
-    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">自訂資訊即時推送</button>
+    <button class="tab-btn active" id="tabListBtn" onclick="switchTab('list')">名單點選切換</button>
+    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">單筆自訂/新增</button>
+    <button class="tab-btn" id="tabBatchBtn" onclick="switchTab('batch')">批量匯入名單</button>
   </div>
 
-  <!-- 分頁 1: 自訂資訊 -->
+  <!-- 分頁 1: 名單點選切換 -->
+  <div id="viewList">
+    <div class="speaker-list" id="cardContainer"></div>
+  </div>
+
+  <!-- 分頁 2: 單筆自訂 / 新增 -->
   <div id="viewCustom" style="display: none;">
     <div class="custom-box">
       <div class="form-group">
-        <label>校長姓名</label>
+        <label>候選人姓名</label>
         <input type="text" id="inputName" placeholder="例如：林書銘">
       </div>
       <div class="form-group">
-        <label>期別 / 身分標牌</label>
-        <input type="text" id="inputTerm" placeholder="例如：第28期候用校長">
+        <label>期別 / 身分標籤</label>
+        <input type="text" id="inputTerm" placeholder="例如：第28期候用校長" value="第28期候用校長">
       </div>
       <div class="form-group">
         <label>底部側標 / 辦學理念標語</label>
@@ -315,19 +328,36 @@
 
       <div class="form-btns">
         <button class="btn-submit" onclick="sendCustomData()">⚡ 立即更新 OBS 畫面</button>
-        <button class="btn-save" onclick="saveToCards()">💾 存入名單卡片</button>
+        <button class="btn-save" onclick="saveToCards()">💾 新增加入名單</button>
       </div>
     </div>
   </div>
 
-  <!-- 分頁 2: 點選名單 -->
-  <div id="viewList">
-    <div class="speaker-list" id="cardContainer"></div>
+  <!-- 分頁 3: 批量文字匯入 -->
+  <div id="viewBatch" style="display: none;">
+    <div class="custom-box">
+      <div class="form-group">
+        <label>快速貼上名單 (每行一位，格式：姓名, 期別, 標語)</label>
+        <textarea id="batchInput" rows="7" placeholder="陳秋貝, 第28期候用校長, 以溫度引領、以專業實踐
+王大同, 第28期候用校長, 科技賦能創新，厚植學生素養
+李小美, 第28期候用校長, 適性揚才，讓孩子發光"></textarea>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+        * 可直接從 Excel 複製三欄（姓名、期別、標語）貼入，逗號或 Tab 均可識別。
+      </div>
+      <div class="form-btns">
+        <button class="btn-submit" onclick="importBatch(false)">➕ 追加到現有名單</button>
+        <button class="btn-save" style="background:#5a1e1e; border-color:#ff4d4d;" onclick="importBatch(true)">⚠️ 覆蓋現有名單</button>
+      </div>
+      <div style="margin-top:15px; text-align:center;">
+        <button class="btn-icon" style="color:var(--primary);" onclick="resetToDefault()">恢復預設 10 位名單</button>
+      </div>
+    </div>
   </div>
 
-  <!-- 底部即時顯示列 -->
+  <!-- 底部固定顯示列 -->
   <div class="current-display">
-    <div>當前正在報告：<span class="current-name" id="currentLabel">尚未選擇</span></div>
+    <div>正在報告：<span class="current-name" id="currentLabel">尚未選擇</span></div>
     <button onclick="clearDisplay()" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border); background: #1a263d; color: #cbd5e1; font-size: 12px;">清空</button>
   </div>
 
@@ -351,26 +381,27 @@
     const TOPIC = "taoyuan-live-controller-x883";
     const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
-    let currentIndex = -1;  // 當前正在演講的順序索引
-    let isNextMode = false;  // 當前是否處於 NEXT 幕中
+    let currentIndex = -1;
+    let isNextMode = false;
 
     client.on('connect', () => {
       document.getElementById('statusDot').classList.add('online');
       const text = document.getElementById('statusText');
-      text.innerText = "已連線 (可隨時點按操作)";
+      text.innerText = "已連線 (可隨時點按)";
       text.style.color = "#00ff88";
     });
 
     client.on('offline', () => {
       document.getElementById('statusDot').classList.remove('online');
       const text = document.getElementById('statusText');
-      text.innerText = "離線中，重新連線...";
+      text.innerText = "重新連線中...";
       text.style.color = "#ff4d4d";
     });
 
     function renderCards() {
       const container = document.getElementById('cardContainer');
       container.innerHTML = "";
+      document.getElementById('countLabel').innerText = speakers.length;
 
       speakers.forEach((item, index) => {
         const card = document.createElement('div');
@@ -385,8 +416,14 @@
           </div>
           <div class="speaker-slogan">${item.slogan}</div>
           <div class="card-actions">
-            <button class="btn-icon" onclick="editCard(event, ${index})">✏️ 載入編輯</button>
-            <button class="btn-icon" style="color:var(--danger);" onclick="deleteCard(event, ${index})">🗑️ 刪除</button>
+            <div class="order-btns">
+              <button class="btn-icon" onclick="moveOrder(event, ${index}, -1)">▲</button>
+              <button class="btn-icon" onclick="moveOrder(event, ${index}, 1)">▼</button>
+            </div>
+            <div>
+              <button class="btn-icon" onclick="editCard(event, ${index})">✏️ 載入</button>
+              <button class="btn-icon" style="color:var(--danger); border-color:#552222;" onclick="deleteCard(event, ${index})">🗑️ 刪除</button>
+            </div>
           </div>
         `;
 
@@ -401,7 +438,22 @@
       localStorage.setItem('stream_speakers', JSON.stringify(speakers));
     }
 
-    // 點選手動指定某位校長開始報告
+    // 調整卡片先後順序
+    function moveOrder(e, index, direction) {
+      e.stopPropagation();
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= speakers.length) return;
+
+      const temp = speakers[index];
+      speakers[index] = speakers[targetIndex];
+      speakers[targetIndex] = temp;
+
+      if (currentIndex === index) currentIndex = targetIndex;
+      else if (currentIndex === targetIndex) currentIndex = index;
+
+      renderCards();
+    }
+
     function selectSpeaker(index) {
       currentIndex = index;
       const data = speakers[index];
@@ -409,13 +461,11 @@
 
       if (navigator.vibrate) navigator.vibrate(40);
 
-      // 如果當前處於 NEXT 狀態，直接解除
       if (isNextMode) {
         isNextMode = false;
         updateNextButtonUI();
       }
 
-      // 發送即時更新主版面指令
       client.publish(TOPIC, JSON.stringify({
         action: "switchSpeaker",
         name: data.name,
@@ -427,18 +477,20 @@
       renderCards();
     }
 
-    // 【核心邏輯】：轉場下一位（自動切換為順序 index + 1）
     function handleNextTransition() {
+      if (speakers.length === 0) {
+        alert("名單為空，請先加入候選人！");
+        return;
+      }
+
       if (!isNextMode) {
-        // 進入轉場狀態：計算下一位候選人
         let nextIndex = currentIndex + 1;
         if (nextIndex >= speakers.length) {
-          nextIndex = 0; // 若到底則循環回第 1 位
+          nextIndex = 0;
         }
 
         const nextSpeaker = speakers[nextIndex];
 
-        // 送出指令：顯示 NEXT 全黑科技幕，並直接帶入下一位校長姓名
         client.publish(TOPIC, JSON.stringify({
           action: "showNextTransition",
           nextName: nextSpeaker.name,
@@ -449,12 +501,9 @@
 
         isNextMode = true;
         updateNextButtonUI(nextSpeaker.name);
-
-        // 預先將內部指向下一位
         currentIndex = nextIndex;
         document.getElementById('currentLabel').innerText = `預備中：${currentIndex + 1}. ${nextSpeaker.name}`;
       } else {
-        // 再次點擊：關閉 NEXT 轉場幕，正式讓下一位校長亮相（主畫面名牌正式換成他）
         client.publish(TOPIC, JSON.stringify({
           action: "endNextTransition"
         }));
@@ -482,18 +531,17 @@
       }
     }
 
-    // 自訂輸入並立即送出
     function sendCustomData() {
       const name = document.getElementById('inputName').value.trim();
       const term = document.getElementById('inputTerm').value.trim() || "候用校長";
       const slogan = document.getElementById('inputSlogan').value.trim() || "";
 
       if (!name) {
-        alert("請至少輸入校長姓名！");
+        alert("請輸入校長姓名！");
         return;
       }
 
-      currentIndex = -1; // 自訂模式不綁定順序
+      currentIndex = -1;
       document.getElementById('currentLabel').innerText = name;
 
       client.publish(TOPIC, JSON.stringify({
@@ -511,7 +559,7 @@
 
     function saveToCards() {
       const name = document.getElementById('inputName').value.trim();
-      const term = document.getElementById('inputTerm').value.trim() || "候用校長";
+      const term = document.getElementById('inputTerm').value.trim() || "第28期候用校長";
       const slogan = document.getElementById('inputSlogan').value.trim() || "";
 
       if (!name) {
@@ -523,6 +571,60 @@
       renderCards();
       switchTab('list');
       alert(`已將「${name}」加入名單第 ${speakers.length} 位！`);
+    }
+
+    // 批量匯入邏輯
+    function importBatch(isOverwrite) {
+      const text = document.getElementById('batchInput').value.trim();
+      if (!text) {
+        alert("請先貼上名單內容！");
+        return;
+      }
+
+      const lines = text.split("\n");
+      const newList = [];
+
+      lines.forEach(line => {
+        if (!line.trim()) return;
+        const parts = line.split(/[,\t，]/).map(p => p.trim());
+        if (parts.length >= 1 && parts[0]) {
+          newList.push({
+            name: parts[0],
+            term: parts[1] || "第28期候用校長",
+            slogan: parts[2] || ""
+          });
+        }
+      });
+
+      if (newList.length === 0) {
+        alert("未能辨識有效名單格式！");
+        return;
+      }
+
+      if (isOverwrite) {
+        if (confirm(`確定覆蓋現有名單？將替換為這 ${newList.length} 位。`)) {
+          speakers = newList;
+          currentIndex = -1;
+        } else {
+          return;
+        }
+      } else {
+        speakers = speakers.concat(newList);
+      }
+
+      renderCards();
+      switchTab('list');
+      document.getElementById('batchInput').value = "";
+      alert(`成功處理 ${newList.length} 位候選人！`);
+    }
+
+    function resetToDefault() {
+      if (confirm("確定恢復系統預設的 10 位候用校長名單嗎？")) {
+        speakers = [...DEFAULT_SPEAKERS];
+        currentIndex = -1;
+        renderCards();
+        switchTab('list');
+      }
     }
 
     function editCard(e, index) {
@@ -565,11 +667,13 @@
     }
 
     function switchTab(tab) {
-      const isList = tab === 'list';
-      document.getElementById('viewList').style.display = isList ? 'block' : 'none';
-      document.getElementById('viewCustom').style.display = isList ? 'none' : 'block';
-      document.getElementById('tabListBtn').classList.toggle('active', isList);
-      document.getElementById('tabCustomBtn').classList.toggle('active', !isList);
+      document.getElementById('viewList').style.display = tab === 'list' ? 'block' : 'none';
+      document.getElementById('viewCustom').style.display = tab === 'custom' ? 'block' : 'none';
+      document.getElementById('viewBatch').style.display = tab === 'batch' ? 'block' : 'none';
+
+      document.getElementById('tabListBtn').classList.toggle('active', tab === 'list');
+      document.getElementById('tabCustomBtn').classList.toggle('active', tab === 'custom');
+      document.getElementById('tabBatchBtn').classList.toggle('active', tab === 'batch');
     }
 
     renderCards();
