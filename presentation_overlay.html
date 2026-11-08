@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>Presentation Overlay - 右側欄位垂直對齊版</title>
+  <title>Presentation Overlay - 左右欄位平衡對齊版</title>
   <!-- 免費雲端 MQTT 通訊庫 -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
@@ -24,8 +24,8 @@
 
     /* ============================================================
        1. 底層遮罩與雙孔鏤空 (CSS clip-path)
-          - 左側簡報區：X: 50, Y: 60, W: 1180, H: 720 (底部 Y=780)
-          - 右側攝影機區：X: 1260, Y: 130, W: 610, H: 540 (移出文字，純鏡頭)
+          - 左側簡報區：X: 60, Y: 130, W: 1080, H: 650 (移出頂部標題)
+          - 右側攝影機區：X: 1190, Y: 130, W: 670, H: 540
        ============================================================ */
     .tv-cutout-bg {
       position: absolute;
@@ -38,13 +38,13 @@
       z-index: 1;
 
       clip-path: polygon(
-        /* 外框全螢幕順時針 */
+        /* 外框順時針 */
         0px 0px, 1920px 0px, 1920px 1080px, 0px 1080px, 0px 0px,
-        /* 左側簡報孔洞逆時針 (50, 60) -> (1230, 780) */
-        50px 60px, 50px 780px, 1230px 780px, 1230px 60px, 50px 60px,
+        /* 左側簡報孔洞逆時針 (60, 130) -> (1140, 780) */
+        60px 130px, 60px 780px, 1140px 780px, 1140px 130px, 60px 130px,
         0px 0px,
-        /* 右側攝影機孔洞逆時針 (1260, 130) -> (1870, 670) */
-        1260px 130px, 1260px 670px, 1870px 670px, 1870px 130px, 1260px 130px,
+        /* 右側攝影機孔洞逆時針 (1190, 130) -> (1860, 670) */
+        1190px 130px, 1190px 670px, 1860px 670px, 1860px 130px, 1190px 130px,
         0px 0px
       );
     }
@@ -62,23 +62,23 @@
       z-index: 2;
     }
 
-    /* 左側簡報外框 */
+    /* 左側主簡報框 (純淨無字，Y: 130 ~ 780) */
     .frame-presentation {
       position: absolute;
-      top: 60px;
-      left: 50px;
-      width: 1180px;
-      height: 720px;
+      top: 130px;
+      left: 60px;
+      width: 1080px;
+      height: 650px;
       border: 5px solid #dcdcdc;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0,0,0,0.5);
     }
 
-    /* 右側視訊專屬外框 (純淨鏡頭，Y: 130 ~ 670) */
+    /* 右側視訊框 (Y: 130 ~ 670) */
     .frame-camera {
       position: absolute;
       top: 130px;
-      left: 1260px;
-      width: 610px;
+      left: 1190px;
+      width: 670px;
       height: 540px;
       border: 5px solid #00f2fe;
       border-radius: 8px;
@@ -98,39 +98,48 @@
       z-index: 10;
     }
 
-    /* 左上角：活動標牌 */
-    .program-badge {
+    /* ------------------------------------------------------------
+       左側頂部：主題標題（獨立於簡報框上方，Y: 60px ~ 110px，高 50px）
+       ------------------------------------------------------------ */
+    .left-top-banner {
       position: absolute;
-      top: 30px;
+      top: 60px;
       left: 60px;
+      width: 1080px;
+      height: 50px;
       background: linear-gradient(135deg, #0d3b66 0%, #001f3f 100%);
       border-left: 6px solid #ffde59;
       border-top: 2px solid #5fa8d3;
       border-bottom: 2px solid #5fa8d3;
       border-right: 2px solid #5fa8d3;
-      padding: 8px 24px;
-      transform: skewX(-12deg);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.7);
     }
 
     .program-title {
-      transform: skewX(12deg);
-      font-size: 26px;
+      font-size: 24px;
       font-weight: 900;
       letter-spacing: 2px;
       color: #ffffff;
       text-shadow: 1px 2px 4px rgba(0, 0, 0, 0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: opacity 0.3s ease;
     }
 
     /* ------------------------------------------------------------
-       右側 3 個欄位：頂部對齊 Y=60px、底部對齊 Y=780px
+       右側 3 個欄位：與左側等高對齊 (Y: 60px ~ 780px)
        ------------------------------------------------------------ */
-    /* 欄位 1：頂部「說明現場 ＋ 數字時鐘」（Y: 60px ~ 110px） */
+    /* 右側欄位 1：頂部地點與時間（Y: 60px ~ 110px，高 50px） */
     .right-top-bar {
       position: absolute;
       top: 60px;
-      left: 1260px;
-      width: 610px;
+      left: 1190px;
+      width: 670px;
       height: 50px;
       display: flex;
       justify-content: space-between;
@@ -181,12 +190,12 @@
     }
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
 
-    /* 欄位 3：底部姓名標牌（徹底移出視訊框下，Y: 690px ~ 780px，剛好對齊簡報底部 780px） */
+    /* 右側欄位 3：底部講者姓名標牌（Y: 688px ~ 780px，底端貼齊簡報框 780px） */
     .right-bottom-speaker {
       position: absolute;
       top: 688px;
-      left: 1260px;
-      width: 610px;
+      left: 1190px;
+      width: 670px;
       height: 92px;
       display: flex;
       flex-direction: column;
@@ -223,8 +232,8 @@
     .news-bottom-container {
       position: absolute;
       bottom: 20px;
-      left: 50px;
-      right: 50px;
+      left: 60px;
+      right: 60px;
       height: 250px;
       display: flex;
       flex-direction: column;
@@ -401,12 +410,12 @@
 
   <!-- 3. 前景資訊層 -->
   <div class="ui-layer">
-    <!-- 左上角活動標牌 -->
-    <div class="program-badge">
+    <!-- 左側頂部：主題標題（獨立於簡報框外，與右側地點時鐘切齊 Y=60px） -->
+    <div class="left-top-banner">
       <div class="program-title" id="mainTitle">115學年度國民中學候用校長辦學理念公開說明會</div>
     </div>
 
-    <!-- 右側欄位 1：頂部地點與時間（對齊簡報框頂部 60px） -->
+    <!-- 右側欄位 1：頂部地點與時間（對齊 Y=60px） -->
     <div class="right-top-bar">
       <div class="venue-pill" id="venueTag">【說明會現場 ｜ 桃園國中演藝廳】</div>
       <div class="digital-clock-pill">
@@ -414,7 +423,7 @@
       </div>
     </div>
 
-    <!-- 右側欄位 3：底部講者姓名標牌（移出視訊框，底緣對齊簡報框 780px） -->
+    <!-- 右側欄位 3：底部講者姓名標牌（底緣對齊簡報框 Y=780px） -->
     <div class="right-bottom-speaker" id="speakerBox">
       <div class="speaker-term-box" id="speakerTerm">第28期候用校長</div>
       <div class="speaker-name-box" id="speakerName">陳秋貝</div>
