@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>直播控制器 (支援活動標題與地點自訂)</title>
+  <!-- 免費雲端 MQTT 通訊庫 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --bg: #090e17;
+      --card-bg: #121c2d;
+      --card-active: #1e3355;
+      --primary: #4df3ff;
+      --accent: #ffde59;
+      --danger: #ff4d4d;
+      --border: #2a3d66;
+      --text-muted: #8fa0be;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: #ffffff;
+      padding: 14px;
+      padding-bottom: 95px;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #888;
+      margin-right: 6px;
+    }
+    .status-indicator.online { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 9px 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #000;
+      border-color: var(--primary);
+    }
+
+    /* 快捷功能列 */
+    .quick-actions {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .action-btn {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      gap: 2px;
+    }
+    .action-btn:active { opacity: 0.7; }
+    .action-btn.active-warn { background: #7a4300; border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px rgba(255, 222, 89, 0.4); }
+
+    .btn-sub {
+      font-size: 11px;
+      font-weight: normal;
+      opacity: 0.8;
+    }
+
+    /* 表單區塊 */
+    .custom-box {
+      background: var(--card-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .box-header-title {
+      font-size: 15px;
+      font-weight: bold;
+      color: var(--primary);
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 6px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+
+    .form-group input, .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      background: #060a12;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .form-group input:focus, .form-group textarea:focus {
+      border-color: var(--primary);
+    }
+
+    .form-btns {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .btn-submit {
+      flex: 1.2;
+      background: var(--accent);
+      color: #000;
+      font-weight: bold;
+      border: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .btn-save {
+      flex: 1;
+      background: #1e3355;
+      color: #fff;
+      border: 1px solid var(--primary);
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    /* 卡片列表 */
+    .speaker-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .speaker-card {
+      position: relative;
+      background: var(--card-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .speaker-card.active {
+      border-color: var(--accent);
+      background: var(--card-active);
+      box-shadow: 0 0 10px rgba(255, 222, 89, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .speaker-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+    .speaker-card.active .speaker-name {
+      color: var(--accent);
+    }
+
+    .speaker-tag {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+    }
+
+    .speaker-slogan {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+
+    .card-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding-top: 6px;
+    }
+
+    .order-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+
+    /* 底部狀態列 */
+    .current-display {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(9, 14, 23, 0.96);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+    }
+    .current-name {
+      color: var(--accent);
+      font-weight: bold;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 連線狀態 -->
+  <div class="status-bar">
+    <div>
+      <span class="status-indicator" id="statusDot"></span>
+      <span id="statusText">MQTT 連線中...</span>
+    </div>
+    <div style="color: var(--text-muted);">人數: <span id="countLabel" style="color: var(--primary); font-weight:bold;">0</span></div>
+  </div>
+
+  <!-- 快捷功能列 -->
+  <div class="quick-actions">
+    <button class="action-btn" id="nextBtn" onclick="handleNextTransition()">
+      <span id="nextBtnTitle">⏭ 轉場下一位</span>
+      <span class="btn-sub" id="nextBtnSub">預告下一順位</span>
+    </button>
+    <button class="action-btn" onclick="resendCurrent()">
+      <span>🔄 重整發送</span>
+      <span class="btn-sub">同步當前資訊</span>
+    </button>
+  </div>
+
+  <!-- 分頁選單 -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tabListBtn" onclick="switchTab('list')">名單點選切換</button>
+    <button class="tab-btn" id="tabCustomBtn" onclick="switchTab('custom')">自訂資訊/活動設定</button>
+    <button class="tab-btn" id="tabBatchBtn" onclick="switchTab('batch')">批量匯入名單</button>
+  </div>
+
+  <!-- 分頁 1: 名單點選切換 -->
+  <div id="viewList">
+    <div class="speaker-list" id="cardContainer"></div>
+  </div>
+
+  <!-- 分頁 2: 單筆自訂 / 活動資訊設定 -->
+  <div id="viewCustom" style="display: none;">
+    <!-- 活動全域設定區塊 -->
+    <div class="custom-box">
+      <div class="box-header-title">📌 說明會整體設定 (頂部標題與地點)</div>
+      <div class="form-group">
+        <label>頂部主標題文字</label>
+        <input type="text" id="inputMainTitle" placeholder="例如：115學年度國民中學候用校長辦學理念公開說明會">
+      </div>
+      <div class="form-group">
+        <label>右上角現場地點文字</label>
+        <input type="text" id="inputVenue" placeholder="例如：【說明會現場 ｜ 桃園國中演藝廳】">
+      </div>
+      <div class="form-btns">
+        <button class="btn-submit" onclick="sendEventConfig()">⚡ 更新說明會標題與地點</button>
+      </div>
+    </div>
+
+    <!-- 候選人自訂區塊 -->
+    <div class="custom-box">
+      <div class="box-header-title">👤 候選人資訊設定</div>
+      <div class="form-group">
+        <label>候選人姓名</label>
+        <input type="text" id="inputName" placeholder="例如：林書銘">
+      </div>
+      <div class="form-group">
+        <label>期別 / 身分標籤</label>
+        <input type="text" id="inputTerm" placeholder="例如：第28期候用校長" value="第28期候用校長">
+      </div>
+      <div class="form-group">
+        <label>底部側標 / 辦學理念標語</label>
+        <textarea id="inputSlogan" rows="2" placeholder="例如：以愛為核心、共創智慧新校園"></textarea>
+      </div>
+
+      <div class="form-btns">
+        <button class="btn-submit" onclick="sendCustomData()">⚡ 立即更新講者資訊</button>
+        <button class="btn-save" onclick="saveToCards()">💾 新增加入名單</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分頁 3: 批量文字匯入 -->
+  <div id="viewBatch" style="display: none;">
+    <div class="custom-box">
+      <div class="form-group">
+        <label>快速貼上名單 (每行一位，格式：姓名, 期別, 標語)</label>
+        <textarea id="batchInput" rows="7" placeholder="陳秋貝, 第28期候用校長, 以溫度引領、以專業實踐
+王大同, 第28期候用校長, 科技賦能創新，厚植學生素養
+李小美, 第28期候用校長, 適性揚才，讓孩子發光"></textarea>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+        * 可直接從 Excel 複製三欄（姓名、期別、標語）貼入，逗號或 Tab 均可識別。
+      </div>
+      <div class="form-btns">
+        <button class="btn-submit" onclick="importBatch(false)">➕ 追加到現有名單</button>
+        <button class="btn-save" style="background:#5a1e1e; border-color:#ff4d4d;" onclick="importBatch(true)">⚠️ 覆蓋現有名單</button>
+      </div>
+      <div style="margin-top:15px; text-align:center;">
+        <button class="btn-icon" style="color:var(--primary);" onclick="resetToDefault()">恢復預設 10 位名單</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部固定顯示列 -->
+  <div class="current-display">
+    <div>正在報告：<span class="current-name" id="currentLabel">尚未選擇</span></div>
+    <button onclick="clearDisplay()" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border); background: #1a263d; color: #cbd5e1; font-size: 12px;">清空</button>
+  </div>
+
+  <script>
+    const DEFAULT_SPEAKERS = [
+      { name: "陳秋貝", term: "第28期候用校長", slogan: "以溫度引領、以專業實踐，成就師生與學校共好願景" },
+      { name: "王大同", term: "第28期候用校長", slogan: "科技賦能創新，厚植學生跨域核心素養" },
+      { name: "李小美", term: "第28期候用校長", slogan: "適性揚才無極限，讓每位孩子找到發光的舞台" },
+      { name: "張文華", term: "第28期候用校長", slogan: "友善溫馨活力校園，深化品格共創卓越未來" },
+      { name: "趙志強", term: "第28期候用校長", slogan: "深化雙語跨國鏈結，拓展新世代世界競爭力" },
+      { name: "林玉玲", term: "第28期候用校長", slogan: "深耕閱讀與多元美感，培育終身自主學習力" },
+      { name: "黃俊傑", term: "第28期候用校長", slogan: "引進社區與外部資源，建構緊密夥伴共好生態系" },
+      { name: "吳雅芳", term: "第28期候用校長", slogan: "全方位弱勢關懷，堅持一個孩子都不能少" },
+      { name: "鄭立德", term: "第28期候用校長", slogan: "創新思維翻轉教學，引領親師生持續前進" },
+      { name: "劉慧珍", term: "第28期候用校長", slogan: "穩健行政溫暖溝通，攜手營造幸福智慧校園" }
+    ];
+
+    let speakers = JSON.parse(localStorage.getItem('stream_speakers')) || DEFAULT_SPEAKERS;
+
+    // 讀取儲存的標題與地點
+    let currentMainTitle = localStorage.getItem('stream_main_title') || "115學年度國民中學候用校長辦學理念公開說明會";
+    let currentVenue = localStorage.getItem('stream_venue') || "【說明會現場 ｜ 桃園國中演藝廳】";
+
+    const TOPIC = "taoyuan-live-controller-x883";
+    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+    let currentIndex = -1;
+    let isNextMode = false;
+
+    // 初始化填入標題與地點
+    document.getElementById('inputMainTitle').value = currentMainTitle;
+    document.getElementById('inputVenue').value = currentVenue;
+
+    client.on('connect', () => {
+      document.getElementById('statusDot').classList.add('online');
+      const text = document.getElementById('statusText');
+      text.innerText = "已連線 (可隨時點按)";
+      text.style.color = "#00ff88";
+    });
+
+    client.on('offline', () => {
+      document.getElementById('statusDot').classList.remove('online');
+      const text = document.getElementById('statusText');
+      text.innerText = "重新連線中...";
+      text.style.color = "#ff4d4d";
+    });
+
+    // 發送全域標題與地點更新
+    function sendEventConfig() {
+      const title = document.getElementById('inputMainTitle').value.trim();
+      const venue = document.getElementById('inputVenue').value.trim();
+
+      if (!title && !venue) {
+        alert("請輸入標題或地點！");
+        return;
+      }
+
+      currentMainTitle = title;
+      currentVenue = venue;
+      localStorage.setItem('stream_main_title', currentMainTitle);
+      localStorage.setItem('stream_venue', currentVenue);
+
+      client.publish(TOPIC, JSON.stringify({
+        action: "updateConfig",
+        title: currentMainTitle,
+        venue: currentVenue
+      }));
+
+      if (navigator.vibrate) navigator.vibrate(40);
+      alert("✅ 說明會標題與地點已同步更新至 OBS！");
+    }
+
+    function renderCards() {
+      const container = document.getElementById('cardContainer');
+      container.innerHTML = "";
+      document.getElementById('countLabel').innerText = speakers.length;
+
+      speakers.forEach((item, index) => {
+        const card = document.createElement('div');
+        const isActive = currentIndex === index;
+        card.className = `speaker-card ${isActive ? 'active' : ''}`;
+        card.id = `card-${index}`;
+
+        card.innerHTML = `
+          <div class="card-header">
+            <span class="speaker-name">${index + 1}. ${item.name}</span>
+            <span class="speaker-tag">${item.term}</span>
+          </div>
+          <div class="speaker-slogan">${item.slogan}</div>
+          <div class="card-actions">
+            <div class="order-btns">
+              <button class="btn-icon" onclick="moveOrder(event, ${index}, -1)">▲</button>
+              <button class="btn-icon" onclick="moveOrder(event, ${index}, 1)">▼</button>
+            </div>
+            <div>
+              <button class="btn-icon" onclick="editCard(event, ${index})">✏️ 載入</button>
+              <button class="btn-icon" style="color:var(--danger); border-color:#552222;" onclick="deleteCard(event, ${index})">🗑️ 刪除</button>
+            </div>
+          </div>
+        `;
+
+        card.onclick = (e) => {
+          if (e.target.tagName.toLowerCase() === 'button') return;
+          selectSpeaker(index);
+        };
+
+        container.appendChild(card);
+      });
+
+      localStorage.setItem('stream_speakers', JSON.stringify(speakers));
+    }
+
+    function moveOrder(e, index, direction) {
+      e.stopPropagation();
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= speakers.length) return;
+
+      const temp = speakers[index];
+      speakers[index] = speakers[targetIndex];
+      speakers[targetIndex] = temp;
+
+      if (currentIndex === index) currentIndex = targetIndex;
+      else if (currentIndex === targetIndex) currentIndex = index;
+
+      renderCards();
+    }
+
+    function selectSpeaker(index) {
+      currentIndex = index;
+      const data = speakers[index];
+      document.getElementById('currentLabel').innerText = `${index + 1}. ${data.name}`;
+
+      if (navigator.vibrate) navigator.vibrate(40);
+
+      if (isNextMode) {
+        isNextMode = false;
+        updateNextButtonUI();
+      }
+
+      client.publish(TOPIC, JSON.stringify({
+        action: "switchSpeaker",
+        name: data.name,
+        term: data.term,
+        slogan: data.slogan,
+        hideNext: true
+      }));
+
+      renderCards();
+    }
+
+    function handleNextTransition() {
+      if (speakers.length === 0) {
+        alert("名單為空，請先加入候選人！");
+        return;
+      }
+
+      if (!isNextMode) {
+        let nextIndex = currentIndex + 1;
+        if (nextIndex >= speakers.length) {
+          nextIndex = 0;
+        }
+
+        const nextSpeaker = speakers[nextIndex];
+
+        client.publish(TOPIC, JSON.stringify({
+          action: "showNextTransition",
+          nextName: nextSpeaker.name,
+          nextTerm: nextSpeaker.term,
+          nextSlogan: nextSpeaker.slogan,
+          nextIndex: nextIndex
+        }));
+
+        isNextMode = true;
+        updateNextButtonUI(nextSpeaker.name);
+        currentIndex = nextIndex;
+        document.getElementById('currentLabel').innerText = `預備中：${currentIndex + 1}. ${nextSpeaker.name}`;
+      } else {
+        client.publish(TOPIC, JSON.stringify({
+          action: "endNextTransition"
+        }));
+
+        isNextMode = false;
+        updateNextButtonUI();
+        document.getElementById('currentLabel').innerText = `${currentIndex + 1}. ${speakers[currentIndex].name}`;
+        renderCards();
+      }
+    }
+
+    function updateNextButtonUI(upcomingName = "") {
+      const btn = document.getElementById('nextBtn');
+      const title = document.getElementById('nextBtnTitle');
+      const sub = document.getElementById('nextBtnSub');
+
+      if (isNextMode) {
+        btn.classList.add('active-warn');
+        title.innerText = "▶ 結束轉場 (切出新講者)";
+        sub.innerText = `準備亮相：${upcomingName}`;
+      } else {
+        btn.classList.remove('active-warn');
+        title.innerText = "⏭ 轉場下一位";
+        sub.innerText = "預告下一順位";
+      }
+    }
+
+    function sendCustomData() {
+      const name = document.getElementById('inputName').value.trim();
+      const term = document.getElementById('inputTerm').value.trim() || "候用校長";
+      const slogan = document.getElementById('inputSlogan').value.trim() || "";
+
+      if (!name) {
+        alert("請輸入校長姓名！");
+        return;
+      }
+
+      currentIndex = -1;
+      document.getElementById('currentLabel').innerText = name;
+
+      client.publish(TOPIC, JSON.stringify({
+        action: "switchSpeaker",
+        name: name,
+        term: term,
+        slogan: slogan,
+        hideNext: true
+      }));
+
+      isNextMode = false;
+      updateNextButtonUI();
+      renderCards();
+    }
+
+    function saveToCards() {
+      const name = document.getElementById('inputName').value.trim();
+      const term = document.getElementById('inputTerm').value.trim() || "第28期候用校長";
+      const slogan = document.getElementById('inputSlogan').value.trim() || "";
+
+      if (!name) {
+        alert("請輸入校長姓名再儲存！");
+        return;
+      }
+
+      speakers.push({ name, term, slogan });
+      renderCards();
+      switchTab('list');
+      alert(`已將「${name}」加入名單第 ${speakers.length} 位！`);
+    }
+
+    function importBatch(isOverwrite) {
+      const text = document.getElementById('batchInput').value.trim();
+      if (!text) {
+        alert("請先貼上名單內容！");
+        return;
+      }
+
+      const lines = text.split("\n");
+      const newList = [];
+
+      lines.forEach(line => {
+        if (!line.trim()) return;
+        const parts = line.split(/[,\t，]/).map(p => p.trim());
+        if (parts.length >= 1 && parts[0]) {
+          newList.push({
+            name: parts[0],
+            term: parts[1] || "第28期候用校長",
+            slogan: parts[2] || ""
+          });
+        }
+      });
+
+      if (newList.length === 0) {
+        alert("未能辨識有效名單格式！");
+        return;
+      }
+
+      if (isOverwrite) {
+        if (confirm(`確定覆蓋現有名單？將替換為這 ${newList.length} 位。`)) {
+          speakers = newList;
+          currentIndex = -1;
+        } else {
+          return;
+        }
+      } else {
+        speakers = speakers.concat(newList);
+      }
+
+      renderCards();
+      switchTab('list');
+      document.getElementById('batchInput').value = "";
+      alert(`成功處理 ${newList.length} 位候選人！`);
+    }
+
+    function resetToDefault() {
+      if (confirm("確定恢復系統預設的 10 位候用校長名單嗎？")) {
+        speakers = [...DEFAULT_SPEAKERS];
+        currentIndex = -1;
+        renderCards();
+        switchTab('list');
+      }
+    }
+
+    function editCard(e, index) {
+      e.stopPropagation();
+      const item = speakers[index];
+      document.getElementById('inputName').value = item.name;
+      document.getElementById('inputTerm').value = item.term;
+      document.getElementById('inputSlogan').value = item.slogan;
+      switchTab('custom');
+    }
+
+    function deleteCard(e, index) {
+      e.stopPropagation();
+      if (confirm(`確定要刪除「${speakers[index].name}」嗎？`)) {
+        speakers.splice(index, 1);
+        if (currentIndex === index) currentIndex = -1;
+        renderCards();
+      }
+    }
+
+    function resendCurrent() {
+      // 重新發布當前講者資訊
+      if (currentIndex >= 0 && currentIndex < speakers.length) {
+        selectSpeaker(currentIndex);
+      }
+      // 重新發布活動標題與地點
+      client.publish(TOPIC, JSON.stringify({
+        action: "updateConfig",
+        title: currentMainTitle,
+        venue: currentVenue
+      }));
+    }
+
+    function clearDisplay() {
+      client.publish(TOPIC, JSON.stringify({
+        action: "switchSpeaker",
+        name: "",
+        term: "",
+        slogan: "",
+        hideNext: true
+      }));
+      document.getElementById('currentLabel').innerText = "(已清空)";
+      currentIndex = -1;
+      isNextMode = false;
+      updateNextButtonUI();
+      renderCards();
+    }
+
+    function switchTab(tab) {
+      document.getElementById('viewList').style.display = tab === 'list' ? 'block' : 'none';
+      document.getElementById('viewCustom').style.display = tab === 'custom' ? 'block' : 'none';
+      document.getElementById('viewBatch').style.display = tab === 'batch' ? 'block' : 'none';
+
+      document.getElementById('tabListBtn').classList.toggle('active', tab === 'list');
+      document.getElementById('tabCustomBtn').classList.toggle('active', tab === 'custom');
+      document.getElementById('tabBatchBtn').classList.toggle('active', tab === 'batch');
+    }
+
+    renderCards();
+  </script>
+</body>
+</html>
