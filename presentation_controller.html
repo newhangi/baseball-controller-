@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>直播控制器 (支援活動標題與地點自訂)</title>
+  <title>直播控制器 (支援頻道參數與名單擴充)</title>
   <!-- 免費雲端 MQTT 通訊庫 -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
@@ -292,7 +292,10 @@
       <span class="status-indicator" id="statusDot"></span>
       <span id="statusText">MQTT 連線中...</span>
     </div>
-    <div style="color: var(--text-muted);">人數: <span id="countLabel" style="color: var(--primary); font-weight:bold;">0</span></div>
+    <div style="color: var(--text-muted);">
+      房間: <span id="roomLabel" style="color: var(--primary); font-weight:bold;">default</span> 
+      | 人數: <span id="countLabel" style="color: var(--accent); font-weight:bold;">0</span>
+    </div>
   </div>
 
   <!-- 快捷功能列 -->
@@ -349,7 +352,7 @@
         <input type="text" id="inputTerm" placeholder="例如：第28期候用校長" value="第28期候用校長">
       </div>
       <div class="form-group">
-        <label>底部側標 / 辦學理念標語</label>
+        <label>底部理念標語</label>
         <textarea id="inputSlogan" rows="2" placeholder="例如：以愛為核心、共創智慧新校園"></textarea>
       </div>
 
@@ -404,17 +407,23 @@
 
     let speakers = JSON.parse(localStorage.getItem('stream_speakers')) || DEFAULT_SPEAKERS;
 
-    // 讀取儲存的標題與地點
+    // 讀取網址上的 ?room= 參數，與 OBS 保持一致
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomID = urlParams.get('room') || "taoyuan-live-controller-x883";
+    const TOPIC = `stream-room-${roomID}`;
+
+    document.getElementById('roomLabel').textContent = urlParams.get('room') || "預設";
+
+    // 讀取本地儲存的活動標題與地點
     let currentMainTitle = localStorage.getItem('stream_main_title') || "115學年度國民中學候用校長辦學理念公開說明會";
     let currentVenue = localStorage.getItem('stream_venue') || "【說明會現場 ｜ 桃園國中演藝廳】";
 
-    const TOPIC = "taoyuan-live-controller-x883";
     const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
     let currentIndex = -1;
     let isNextMode = false;
 
-    // 初始化填入標題與地點
+    // 初始化設定框文字
     document.getElementById('inputMainTitle').value = currentMainTitle;
     document.getElementById('inputVenue').value = currentVenue;
 
@@ -432,7 +441,6 @@
       text.style.color = "#ff4d4d";
     });
 
-    // 發送全域標題與地點更新
     function sendEventConfig() {
       const title = document.getElementById('inputMainTitle').value.trim();
       const venue = document.getElementById('inputVenue').value.trim();
@@ -703,11 +711,9 @@
     }
 
     function resendCurrent() {
-      // 重新發布當前講者資訊
       if (currentIndex >= 0 && currentIndex < speakers.length) {
         selectSpeaker(currentIndex);
       }
-      // 重新發布活動標題與地點
       client.publish(TOPIC, JSON.stringify({
         action: "updateConfig",
         title: currentMainTitle,
