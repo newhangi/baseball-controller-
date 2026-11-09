@@ -2,8 +2,11 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>Presentation Overlay - 支援科技規則說明頁版</title>
+  <title>Presentation Overlay - 支援 OBS 本機自動靜音版</title>
+  <!-- 免費雲端 MQTT 通訊庫 -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <!-- OBS WebSocket v5 通訊庫 -->
+  <script src="https://cdn.jsdelivr.net/npm/obs-websocket-js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -334,9 +337,7 @@
     .next-name-text { font-size: 96px; font-weight: 900; color: #ffffff; letter-spacing: 18px; text-shadow: 0 0 35px rgba(255, 255, 255, 0.8); }
     .next-bottom-bar { width: 100%; height: 56px; border: 3px solid #3c598e; border-radius: 8px; background: #0b1526; }
 
-    /* ============================================================
-       5. 規則說明全螢幕遮罩 (1:1 還原科技電路板風格，完全不透明)
-       ============================================================ */
+    /* 5. 規則說明全螢幕遮罩 */
     .rules-screen-overlay {
       position: fixed;
       top: 0;
@@ -354,7 +355,6 @@
     }
     .rules-screen-overlay.active { display: flex; }
 
-    /* 頂部發光飾條 */
     .rule-screen-top-bar {
       width: 100%;
       height: 85px;
@@ -370,7 +370,6 @@
     .rule-screen-arrows { color: #4df3ff; font-size: 40px; font-weight: 900; letter-spacing: -3px; }
     .rule-screen-title { font-size: 42px; font-weight: 900; letter-spacing: 6px; color: #ffffff; }
 
-    /* 中間大字規則區塊 (帶科技蜂巢微光底圖) */
     .rule-screen-center {
       width: 100%;
       flex: 1;
@@ -408,7 +407,6 @@
       text-shadow: 0 2px 6px rgba(0,0,0,0.8);
     }
 
-    /* 底部提示橫幅 (黃色標牌 + 藍底橫幅) */
     .rule-screen-bottom-bar {
       width: 100%;
       height: 85px;
@@ -513,9 +511,7 @@
 
     <div class="rule-screen-center">
       <div class="rule-note-label">備註：</div>
-      <div class="rule-items-box" id="ruleItemsContainer">
-        <!-- 規則行將動態生成 -->
-      </div>
+      <div class="rule-items-box" id="ruleItemsContainer"></div>
     </div>
 
     <div class="rule-screen-bottom-bar">
@@ -525,6 +521,47 @@
   </div>
 
   <script>
+    /* ============================================================
+       【OBS WebSocket 本機連線設定】
+       ============================================================ */
+    const OBS_WS_PORT = 4455;            // OBS WebSocket 預設埠號
+    const OBS_WS_PASSWORD = "";          // 若 OBS 關閉驗證則留空；有設密碼請填入
+    const OBS_MIC_NAME = "麥克風/輸入音效 1";   // 請確認與 OBS 混音器中的麥克風名稱一致 (常見: 麥克風/Aux 或 Mic/Aux)
+
+    const obs = new OBSWebSocket();
+    let isObsConnected = false;
+
+    async function initObsWebSocket() {
+      try {
+        await obs.connect(`ws://127.0.0.1:${OBS_WS_PORT}`, OBS_WS_PASSWORD);
+        isObsConnected = true;
+        console.log("✅ 成功連線至 OBS WebSocket！可自動控制麥克風靜音。");
+      } catch (error) {
+        console.warn("⚠️ OBS WebSocket 連線失敗（請檢查 OBS 工具->WebSocket 是否啟用）:", error.message);
+        isObsConnected = false;
+      }
+    }
+
+    // 發送靜音/取消靜音指令給 OBS 核心
+    async function setMicMute(muteState) {
+      if (!isObsConnected) return;
+      try {
+        await obs.call('SetInputMute', {
+          inputName: OBS_MIC_NAME,
+          inputMuted: muteState
+        });
+        console.log(`🎙️ 麥克風 [${OBS_MIC_NAME}] 已自動設為: ${muteState ? "【靜音 MUTE】" : "【開音 UNMUTE】"}`);
+      } catch (err) {
+        console.warn(`設定麥克風靜音狀態失敗（請確認名稱是否為 "${OBS_MIC_NAME}"）:`, err.message);
+      }
+    }
+
+    // 初始化本機連線
+    initObsWebSocket();
+
+    /* ============================================================
+       【雲端 MQTT 通訊與切換邏輯】
+       ============================================================ */
     const urlParams = new URLSearchParams(window.location.search);
     const roomID = urlParams.get('room') || "taoyuan-live-controller-x883";
     const TOPIC = `stream-room-${roomID}`;
@@ -532,7 +569,6 @@
     const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     let pendingNextData = null;
 
-    // 預設規則內容
     const defaultRules = `>候用校長報告使用時間為每位10分鐘，並依鈴聲為準，時間結束前1分鐘按1次鈴，結束時間到按2次鈴，即需結束報告。
 >請候用校長依程序表所排定之報到時間辦理報到，現場得視實際狀況彈性調整。
 >現場不提供提問或詢答，並全程直播及錄影。
@@ -549,15 +585,19 @@
       try {
         const data = JSON.parse(message.toString());
 
+        // 1. 手動點選名單換講者
         if (data.action === "switchSpeaker") {
           updateSpeakerInfo(data.name, data.term, data.slogan);
           if (data.hideNext) {
             document.getElementById('nextOverlay').classList.remove('active');
+            setMicMute(false); // 確保開麥
           }
         } 
+        // 2. 更新全域標題、地點與副標
         else if (data.action === "updateConfig") {
           updateEventConfig(data.title, data.venue, data.subTitle);
         }
+        // 3. 轉場預告下一位（進入轉場幕 ➜ 自動靜音！）
         else if (data.action === "showNextTransition") {
           pendingNextData = {
             name: data.nextName,
@@ -567,19 +607,32 @@
           document.getElementById('nextName').textContent = data.nextName;
           document.getElementById('nextTerm').textContent = data.nextTerm;
           document.getElementById('nextOverlay').classList.add('active');
+
+          // 自動靜音麥克風
+          setMicMute(true);
         } 
+        // 4. 結束轉場（新校長正式亮相 ➜ 自動開麥！）
         else if (data.action === "endNextTransition") {
           document.getElementById('nextOverlay').classList.remove('active');
           if (pendingNextData) {
             updateSpeakerInfo(pendingNextData.name, pendingNextData.term, pendingNextData.slogan);
             pendingNextData = null;
           }
+
+          // 自動恢復麥克風聲音
+          setMicMute(false);
         }
-        // 開關規則說明頁
+        // 5. 開關規則說明頁（開規則頁時靜音，關閉時開麥）
         else if (data.action === "toggleRules") {
           document.getElementById('rulesOverlay').classList.toggle('active', data.show);
+          
+          if (data.show) {
+            setMicMute(true);  // 開啟規則頁時 ➜ 自動靜音
+          } else {
+            setMicMute(false); // 關閉規則頁、切回現場時 ➜ 自動開麥
+          }
         }
-        // 更新規則說明頁自定義內容
+        // 6. 更新規則內容
         else if (data.action === "updateRulesConfig") {
           if (data.title) document.getElementById('ruleScreenTitle').textContent = data.title;
           if (data.tag) document.getElementById('ruleScreenTag').textContent = data.tag;
